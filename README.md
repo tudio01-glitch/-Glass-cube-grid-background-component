@@ -28,8 +28,9 @@ Other scripts: `npm run typecheck`, `npm run lint`, `npm run build`,
 import { GlassGridBg } from './src/component/GlassGridBg';
 
 <GlassGridBg
-  tiles={{ size: 64, gap: 6, radius: 10 }}
+  tiles={{ size: 64, gapX: 6, gapY: 6, radius: 10 }} // `gap` still works as a shorthand for both axes
   glass={{ refraction: 100, dispersion: 100, depth: 100, frost: 0, splay: 100 }}
+  tilt={{ x: 18, y: -12, perspective: 900 }} // 3D tilt of the whole glass surface
   source={{
     kind: 'shapes',
     preset: {
@@ -44,8 +45,8 @@ import { GlassGridBg } from './src/component/GlassGridBg';
   }}
   quality="css"
 >
-  {/* container content, rendered above the grid */}
-  <h1>שלום</h1>
+  {/* optional container content, rendered above the grid — by default the
+      component ships as a pure background with no texts or buttons */}
 </GlassGridBg>
 ```
 
@@ -80,7 +81,8 @@ Every token can be overridden per instance.
 | Token | Prop | Default |
 | ----- | ---- | ------- |
 | `--ggb-tile-size` | `tiles.size` | `64px` |
-| `--ggb-tile-gap` | `tiles.gap` | `6px` |
+| `--ggb-tile-gap-x` | `tiles.gapX` | `6px` |
+| `--ggb-tile-gap-y` | `tiles.gapY` | `6px` |
 | `--ggb-tile-radius` | `tiles.radius` | `10px` |
 | `--ggb-tile-inset` | `tiles.inset` | `0px` |
 | `--ggb-tile-border` | `tiles.border` | `1px` |
@@ -93,17 +95,25 @@ Every token can be overridden per instance.
 | `--ggb-light-intensity` | `glass.lightIntensity` | `80` |
 | `--ggb-opacity` | `glass.opacity` | `12` |
 | `--ggb-tint` | `glass.tint` | `rgba(255,255,255,0.08)` |
+| `--ggb-tilt-x` | `tilt.x` | `0` (deg, rotateX) |
+| `--ggb-tilt-y` | `tilt.y` | `0` (deg, rotateY) |
+| `--ggb-perspective` | `tilt.perspective` | `900px` |
 | `--ggb-color-1..4` | shapes palette | Bezeq: `#F74A84` `#2A73F0` `#52B9F0` `#0B0B33` |
 | `--ggb-speed` | source speed | `1` |
+
+Tilt tips the source + grid as one plane (`perspective → rotateX/rotateY`) with an
+automatic zoom compensation so the tipped surface keeps covering the container.
 
 The Bezeq default preset lives in `presets/default.json` (tutorial values: refraction 100,
 depth 100, dispersion 100, frost 0, splay 100, light −45° / 80%, `sine` warp 0→5 over ~10s).
 
 ## The lab (`/lab`)
 
-Hebrew RTL panel over a resizable preview with sample content. Groups: tiles, glass
-(including the light-angle dial and the CSS/HQ toggle), background (tabs: shapes / upload /
-draw), export, presets (localStorage + Bezeq-default reset). Shapes origin can be set by
+Hebrew RTL panel over a resizable preview. The preview is a pure background by default —
+sample texts/buttons only appear when the «להציג תוכן לדוגמה» toggle is on. Groups: tiles
+(with separate horizontal/vertical brick gaps), glass (including the light-angle dial and
+the CSS/HQ toggle), surface tilt, background (tabs: shapes / upload / draw), export,
+presets (localStorage + Bezeq-default reset). Shapes origin can be set by
 clicking the preview; the draw tab draws freehand directly over it. The panel is fully
 keyboard operable and `prefers-reduced-motion` freezes the source layer on its first frame
 (with a note in the lab).
@@ -116,8 +126,12 @@ keyboard operable and `prefers-reduced-motion` freezes the source layer on its f
   preset baked in (uploads travel inline as base64 data URLs) and downloads one
   self-contained HTML file that opens offline — ready for upload to Claude Design.
 
+The exported file contains no texts or buttons by default; the lab's toggle (or the CLI
+`--sample` flag) bakes the sample content in.
+
 CLI equivalent:
 
 ```bash
 npm run export -- --preset presets/default.json --out dist/glass-grid-bg.standalone.html
+# add --sample to include the sample headline + button
 ```

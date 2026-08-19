@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { GlassGridBg, computeGridLayout } from '../component/GlassGridBg';
+import { normalizePreset } from '../component/glass/tokens';
 import type { GlassGridPreset, Point } from '../component/glass/tokens';
 import { useReducedMotion } from '../component/layers/useReducedMotion';
 import { supportsHqGlass } from '../component/glass/GlassFilters';
@@ -9,12 +10,13 @@ import type { SourceTab } from './Panel';
 import { DrawCanvas } from './DrawCanvas';
 import './lab.css';
 
-const bezeqDefault = defaultPresetJson as unknown as GlassGridPreset;
+const bezeqDefault: GlassGridPreset = normalizePreset(defaultPresetJson);
 
 export default function LabPage() {
   const [preset, setPreset] = useState<GlassGridPreset>(bezeqDefault);
   const [originPicking, setOriginPicking] = useState(false);
   const [tab, setTab] = useState<SourceTab>(() => categoryOf(bezeqDefault.source));
+  const [showSample, setShowSample] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const [previewBox, setPreviewBox] = useState({ w: 484, h: 484 });
   const reduced = useReducedMotion();
@@ -61,6 +63,7 @@ export default function LabPage() {
         onOriginPickingChange={setOriginPicking}
         tab={tab}
         onTabChange={setTab}
+        showSample={showSample}
       />
       <main className="lab-stage">
         <header className="lab-stage-header">
@@ -68,6 +71,14 @@ export default function LabPage() {
           <p className="lab-stage-meta">
             {layout.cols}×{layout.rows} אריחים
           </p>
+          <label className="lab-sample-toggle">
+            <input
+              type="checkbox"
+              checked={showSample}
+              onChange={(e) => setShowSample(e.target.checked)}
+            />
+            להציג תוכן לדוגמה
+          </label>
         </header>
         {layout.capped && (
           <p className="lab-note lab-note-warning" role="status">
@@ -94,17 +105,20 @@ export default function LabPage() {
           <GlassGridBg
             tiles={preset.tiles}
             glass={preset.glass}
+            tilt={preset.tilt}
             source={preset.source}
             quality={preset.quality}
             className="lab-preview-ggb"
           >
-            <div className="lab-sample">
-              <h2 className="lab-sample-title">רשת שמרגישים דרך הזכוכית</h2>
-              <p className="lab-sample-sub">כל מה שזז מאחור נשבר, מתעדשן ומתפזר</p>
-              <button type="button" className="lab-sample-cta">
-                לגלות עוד
-              </button>
-            </div>
+            {showSample && (
+              <div className="lab-sample">
+                <h2 className="lab-sample-title">רשת שמרגישים דרך הזכוכית</h2>
+                <p className="lab-sample-sub">כל מה שזז מאחור נשבר, מתעדשן ומתפזר</p>
+                <button type="button" className="lab-sample-cta">
+                  לגלות עוד
+                </button>
+              </div>
+            )}
           </GlassGridBg>
           {tab === 'draw' && preset.source.kind === 'draw' && !originPicking && (
             <DrawCanvas

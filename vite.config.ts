@@ -20,8 +20,15 @@ function ggbExportEndpoint(): Plugin {
         req.on('end', () => {
           void (async () => {
             try {
-              const preset: unknown = JSON.parse(body || '{}');
-              const html = await buildStandaloneHtml(preset, server.config.root);
+              const parsed: unknown = JSON.parse(body || '{}');
+              // {preset, sample} envelope; a bare preset is accepted too
+              const envelope =
+                typeof parsed === 'object' && parsed !== null && 'preset' in parsed
+                  ? (parsed as { preset: unknown; sample?: boolean })
+                  : { preset: parsed, sample: false };
+              const html = await buildStandaloneHtml(envelope.preset, server.config.root, {
+                sample: envelope.sample === true,
+              });
               res.setHeader('Content-Type', 'text/html; charset=utf-8');
               res.end(html);
             } catch (err) {

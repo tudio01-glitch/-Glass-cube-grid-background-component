@@ -7,10 +7,14 @@
 
   /* tokens (defaults; props override inline) */
   --ggb-tile-size: 64px;
-  --ggb-tile-gap: 6px;
+  --ggb-tile-gap-x: 6px;
+  --ggb-tile-gap-y: 6px;
   --ggb-tile-radius: 10px;
   --ggb-tile-inset: 0px;
   --ggb-tile-border: 1px;
+  --ggb-tilt-x: 0;
+  --ggb-tilt-y: 0;
+  --ggb-perspective: 900px;
   --ggb-frost: 0;
   --ggb-refraction: 100;
   --ggb-dispersion: 100;
@@ -34,6 +38,20 @@
   --ggb-dispersion-a: calc(var(--ggb-dispersion) / 100);
   --ggb-splay-px: calc(var(--ggb-splay) / 100 * var(--ggb-tile-size) * 0.28);
   --ggb-light-grad-angle: calc(180deg + var(--ggb-light-angle) * 1deg);
+  /* tilt zoom compensation so the tipped plane keeps covering the box */
+  --ggb-tilt-x-abs: max(var(--ggb-tilt-x), calc(-1 * var(--ggb-tilt-x)));
+  --ggb-tilt-y-abs: max(var(--ggb-tilt-y), calc(-1 * var(--ggb-tilt-y)));
+  --ggb-tilt-zoom: calc(1 + (var(--ggb-tilt-x-abs) + var(--ggb-tilt-y-abs)) / 150);
+}
+
+/* 0. the tilted surface: source + grid move as one plane; content stays flat */
+.ggb-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  transform: perspective(var(--ggb-perspective)) rotateX(calc(var(--ggb-tilt-x) * 1deg))
+    rotateY(calc(var(--ggb-tilt-y) * 1deg)) scale(var(--ggb-tilt-zoom));
+  transform-origin: 50% 50%;
 }
 
 /* 1. motion layer */

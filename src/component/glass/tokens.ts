@@ -4,11 +4,21 @@ export type Point = { x: number; y: number };
 
 export type TileSettings = {
   size: number; // px, square tile. default 64
-  gap: number; // px. default 6
+  gapX: number; // px, horizontal gap between bricks. default 6
+  gapY: number; // px, vertical gap between bricks. default 6
   radius: number; // px. default 10
   inset: number; // px padding of the grid inside the container. default 0
   border: number; // px, tile edge stroke. default 1
   fit: 'cover' | 'contain' | 'fixed'; // how the grid fills the container. default cover
+};
+
+/** Prop input: `gap` is accepted as a legacy shorthand that sets both axes. */
+export type TileSettingsInput = Partial<TileSettings> & { gap?: number };
+
+export type TiltSettings = {
+  x: number; // deg, rotateX — vertical tilt of the surface. default 0
+  y: number; // deg, rotateY — horizontal tilt of the surface. default 0
+  perspective: number; // px. default 900
 };
 
 export type GlassSettings = {
@@ -47,8 +57,9 @@ export type MotionSource =
 export type GlassQuality = 'css' | 'hq';
 
 export type GlassGridBgProps = {
-  tiles?: Partial<TileSettings>;
+  tiles?: TileSettingsInput;
   glass?: Partial<GlassSettings>;
+  tilt?: Partial<TiltSettings>; // 3D tilt of the whole glass surface
   source?: MotionSource; // what moves behind the glass
   quality?: GlassQuality; // hq = SVG displacement filters (refraction/dispersion)
   className?: string;
@@ -59,6 +70,7 @@ export type GlassGridBgProps = {
 export type GlassGridPreset = {
   tiles: TileSettings;
   glass: GlassSettings;
+  tilt: TiltSettings;
   source: MotionSource;
   quality: GlassQuality;
 };
@@ -69,12 +81,30 @@ export const MAX_TILES = 400;
 
 export const defaultTiles: TileSettings = {
   size: 64,
-  gap: 6,
+  gapX: 6,
+  gapY: 6,
   radius: 10,
   inset: 0,
   border: 1,
   fit: 'cover',
 };
+
+export const defaultTilt: TiltSettings = {
+  x: 0,
+  y: 0,
+  perspective: 900,
+};
+
+/** Merges tile input over the defaults; legacy `gap` fills both axes. */
+export function normalizeTiles(input: TileSettingsInput = {}): TileSettings {
+  const { gap, ...rest } = input;
+  const tiles = { ...defaultTiles, ...rest };
+  if (gap !== undefined) {
+    tiles.gapX = rest.gapX ?? gap;
+    tiles.gapY = rest.gapY ?? gap;
+  }
+  return tiles;
+}
 
 export const defaultGlass: GlassSettings = {
   frost: 0,
@@ -111,9 +141,28 @@ export const defaultDrawSource: MotionSource = {
 export const defaultPreset: GlassGridPreset = {
   tiles: defaultTiles,
   glass: defaultGlass,
+  tilt: defaultTilt,
   source: defaultSource,
   quality: 'css',
 };
+
+/** Fills a possibly partial / legacy stored preset up to the current shape. */
+export function normalizePreset(input: unknown): GlassGridPreset {
+  const p = (typeof input === 'object' && input !== null ? input : {}) as {
+    tiles?: TileSettingsInput;
+    glass?: Partial<GlassSettings>;
+    tilt?: Partial<TiltSettings>;
+    source?: MotionSource;
+    quality?: GlassQuality;
+  };
+  return {
+    tiles: normalizeTiles(p.tiles),
+    glass: { ...defaultGlass, ...p.glass },
+    tilt: { ...defaultTilt, ...p.tilt },
+    source: p.source ?? defaultSource,
+    quality: p.quality === 'hq' ? 'hq' : 'css',
+  };
+}
 
 function sourceSpeed(source: MotionSource): number {
   switch (source.kind) {
@@ -134,6 +183,7 @@ function sourceSpeed(source: MotionSource): number {
 export function tokensToCssVars(
   tiles: TileSettings,
   glass: GlassSettings,
+  tilt: TiltSettings,
   source: MotionSource,
 ): Record<string, string> {
   const colors =
@@ -142,7 +192,8 @@ export function tokensToCssVars(
       : BEZEQ_COLORS;
   return {
     '--ggb-tile-size': `${tiles.size}px`,
-    '--ggb-tile-gap': `${tiles.gap}px`,
+    '--ggb-tile-gap-x': `${tiles.gapX}px`,
+    '--ggb-tile-gap-y': `${tiles.gapY}px`,
     '--ggb-tile-radius': `${tiles.radius}px`,
     '--ggb-tile-inset': `${tiles.inset}px`,
     '--ggb-tile-border': `${tiles.border}px`,
@@ -151,6 +202,9 @@ export function tokensToCssVars(
     '--ggb-dispersion': String(glass.dispersion),
     '--ggb-depth': String(glass.depth),
     '--ggb-splay': String(glass.splay),
+    '--ggb-tilt-x': String(tilt.x),
+    '--ggb-tilt-y': String(tilt.y),
+    '--ggb-perspective': `${tilt.perspective}px`,
     '--ggb-light-angle': String(glass.lightAngle),
     '--ggb-light-intensity': String(glass.lightIntensity),
     '--ggb-opacity': String(glass.opacity),
@@ -166,7 +220,8 @@ export function tokensToCssVars(
 export function tokensToStyle(
   tiles: TileSettings,
   glass: GlassSettings,
+  tilt: TiltSettings,
   source: MotionSource,
 ): CSSProperties {
-  return tokensToCssVars(tiles, glass, source) as CSSProperties;
+  return tokensToCssVars(tiles, glass, tilt, source) as CSSProperties;
 }

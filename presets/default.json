@@ -1,7 +1,8 @@
 {
   "tiles": {
     "size": 64,
-    "gap": 6,
+    "gapX": 6,
+    "gapY": 6,
     "radius": 10,
     "inset": 0,
     "border": 1,
@@ -17,6 +18,11 @@
     "lightIntensity": 80,
     "opacity": 12,
     "tint": "rgba(255,255,255,0.08)"
+  },
+  "tilt": {
+    "x": 0,
+    "y": 0,
+    "perspective": 900
   },
   "source": {
     "kind": "shapes",

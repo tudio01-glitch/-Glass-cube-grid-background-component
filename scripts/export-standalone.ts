@@ -13,7 +13,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export async function buildStandaloneHtml(preset: unknown, rootDir: string): Promise<string> {
+export async function buildStandaloneHtml(
+  preset: unknown,
+  rootDir: string,
+  options: { sample?: boolean } = {},
+): Promise<string> {
   const result = await build({
     entryPoints: [resolve(rootDir, 'src/standalone/entry.tsx')],
     bundle: true,
@@ -100,7 +104,10 @@ export async function buildStandaloneHtml(preset: unknown, rootDir: string): Pro
   </head>
   <body>
     <div id="root"></div>
-    <script>window.__GGB_PRESET__ = ${presetJson};</script>
+    <script>
+      window.__GGB_PRESET__ = ${presetJson};
+      window.__GGB_SAMPLE__ = ${options.sample === true};
+    </script>
     <script>${js}</script>
   </body>
 </html>
@@ -121,7 +128,7 @@ if (cliEntry) {
   const presetPath = resolve(rootDir, valueOf('--preset') ?? 'presets/default.json');
   const outPath = resolve(rootDir, valueOf('--out') ?? 'dist/glass-grid-bg.standalone.html');
   const preset: unknown = JSON.parse(readFileSync(presetPath, 'utf8'));
-  const html = await buildStandaloneHtml(preset, rootDir);
+  const html = await buildStandaloneHtml(preset, rootDir, { sample: args.includes('--sample') });
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, html);
   console.log(`written ${outPath} (${Math.round(html.length / 1024)} KB)`);

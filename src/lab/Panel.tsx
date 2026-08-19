@@ -5,6 +5,7 @@ import {
   defaultDrawSource,
   defaultPreset,
   defaultSource,
+  normalizePreset,
 } from '../component/glass/tokens';
 import type {
   DrawMotion,
@@ -13,6 +14,7 @@ import type {
   MotionSource,
   ShapesPreset,
   TileSettings,
+  TiltSettings,
 } from '../component/glass/tokens';
 import {
   CheckboxField,
@@ -48,6 +50,7 @@ export type PanelProps = {
   onOriginPickingChange: (picking: boolean) => void;
   tab: SourceTab;
   onTabChange: (tab: SourceTab) => void;
+  showSample: boolean;
 };
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
@@ -66,14 +69,17 @@ export function Panel(props: PanelProps) {
     onChange({ ...preset, tiles: { ...preset.tiles, ...patch } });
   const patchGlass = (patch: Partial<GlassSettings>) =>
     onChange({ ...preset, glass: { ...preset.glass, ...patch } });
+  const patchTilt = (patch: Partial<TiltSettings>) =>
+    onChange({ ...preset, tilt: { ...preset.tilt, ...patch } });
 
-  const { tiles, glass } = preset;
+  const { tiles, glass, tilt } = preset;
 
   return (
     <aside className="lab-panel" aria-label="הגדרות">
       <Group title="אריחים">
         <Slider label="גודל" min={16} max={200} value={tiles.size} unit="px" onChange={(v) => patchTiles({ size: v })} />
-        <Slider label="מרווח" min={0} max={40} value={tiles.gap} unit="px" onChange={(v) => patchTiles({ gap: v })} />
+        <Slider label="רווח אופקי" min={0} max={40} value={tiles.gapX} unit="px" onChange={(v) => patchTiles({ gapX: v })} />
+        <Slider label="רווח אנכי" min={0} max={40} value={tiles.gapY} unit="px" onChange={(v) => patchTiles({ gapY: v })} />
         <Slider label="עיגול פינות" min={0} max={60} value={tiles.radius} unit="px" onChange={(v) => patchTiles({ radius: v })} />
         <Slider label="שוליים פנימיים" min={0} max={80} value={tiles.inset} unit="px" onChange={(v) => patchTiles({ inset: v })} />
         <Slider label="מסגרת" min={0} max={6} step={0.5} value={tiles.border} unit="px" onChange={(v) => patchTiles({ border: v })} />
@@ -110,12 +116,26 @@ export function Panel(props: PanelProps) {
         />
       </Group>
 
+      <Group title="משטח">
+        <Slider label="הטיה אנכית" min={-45} max={45} value={tilt.x} unit="°" onChange={(v) => patchTilt({ x: v })} />
+        <Slider label="הטיה אופקית" min={-45} max={45} value={tilt.y} unit="°" onChange={(v) => patchTilt({ y: v })} />
+        <Slider
+          label="פרספקטיבה"
+          min={300}
+          max={2000}
+          step={50}
+          value={tilt.perspective}
+          unit="px"
+          onChange={(v) => patchTilt({ perspective: v })}
+        />
+      </Group>
+
       <Group title="רקע">
         <BackgroundTabs {...props} />
       </Group>
 
       <Group title="ייצוא">
-        <ExportControls preset={preset} />
+        <ExportControls preset={preset} showSample={props.showSample} />
       </Group>
 
       <Group title="פריסטים">
@@ -191,7 +211,7 @@ function PresetsControls({ preset, onChange }: PanelProps) {
               <button
                 type="button"
                 className="lab-button"
-                onClick={() => onChange(structuredClone(stored[n]))}
+                onClick={() => onChange(normalizePreset(structuredClone(stored[n])))}
               >
                 לטעון: {n}
               </button>
@@ -213,7 +233,7 @@ function PresetsControls({ preset, onChange }: PanelProps) {
 
 /* ---- export ---- */
 
-function ExportControls({ preset }: { preset: GlassGridPreset }) {
+function ExportControls({ preset, showSample }: { preset: GlassGridPreset; showSample: boolean }) {
   const [status, setStatus] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -256,7 +276,7 @@ function ExportControls({ preset }: { preset: GlassGridPreset }) {
           className="lab-button lab-button-primary"
           onClick={() =>
             run(
-              downloadStandaloneHtml(preset),
+              downloadStandaloneHtml(preset, showSample),
               'קובץ ה‑HTML בדרך אליך',
               'ההורדה זמינה בסביבת הפיתוח — אפשר גם npm run export',
             )

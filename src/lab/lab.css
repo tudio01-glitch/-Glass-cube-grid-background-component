@@ -404,3 +404,19 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+
+/* sample-content toggle in the stage header */
+.lab-sample-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #c6cbe8;
+  cursor: pointer;
+}
+
+.lab-sample-toggle input[type='checkbox'] {
+  inline-size: 15px;
+  block-size: 15px;
+  accent-color: #f74a84;
+}

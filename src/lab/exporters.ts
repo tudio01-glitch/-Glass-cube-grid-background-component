@@ -3,7 +3,7 @@ import type { GlassGridPreset } from '../component/glass/tokens';
 
 /** CSS custom-property block for the current state, ready to paste. */
 export function formatCssTokens(preset: GlassGridPreset): string {
-  const vars = tokensToCssVars(preset.tiles, preset.glass, preset.source);
+  const vars = tokensToCssVars(preset.tiles, preset.glass, preset.tilt, preset.source);
   const lines = Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`);
   return `.ggb {\n${lines.join('\n')}\n}\n`;
 }
@@ -20,11 +20,14 @@ export async function copyText(text: string): Promise<void> {
  * Asks the dev server to run the esbuild export with the current preset
  * baked in, then saves the resulting single-file HTML.
  */
-export async function downloadStandaloneHtml(preset: GlassGridPreset): Promise<void> {
+export async function downloadStandaloneHtml(
+  preset: GlassGridPreset,
+  sample = false,
+): Promise<void> {
   const res = await fetch('/__ggb/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(preset),
+    body: JSON.stringify({ preset, sample }),
   });
   if (!res.ok) throw new Error(await res.text());
   const blob = await res.blob();

@@ -4,7 +4,8 @@ import {
   MAX_TILES,
   defaultGlass,
   defaultSource,
-  defaultTiles,
+  defaultTilt,
+  normalizeTiles,
   tokensToStyle,
 } from './glass/tokens';
 import type { GlassGridBgProps, GlassQuality, TileSettings } from './glass/tokens';
@@ -33,8 +34,8 @@ export function computeGridLayout(
   const innerH = Math.max(0, height - 2 * tiles.inset);
   const round = tiles.fit === 'cover' ? Math.ceil : Math.floor;
   const countFor = (size: number) => ({
-    cols: Math.max(1, round((innerW + tiles.gap) / (size + tiles.gap))),
-    rows: Math.max(1, round((innerH + tiles.gap) / (size + tiles.gap))),
+    cols: Math.max(1, round((innerW + tiles.gapX) / (size + tiles.gapX))),
+    rows: Math.max(1, round((innerH + tiles.gapY) / (size + tiles.gapY))),
   });
   let tileSize = Math.max(8, tiles.size);
   let { cols, rows } = countFor(tileSize);
@@ -50,13 +51,15 @@ export function computeGridLayout(
 export function GlassGridBg({
   tiles,
   glass,
+  tilt,
   source,
   quality = 'css',
   className,
   children,
 }: GlassGridBgProps) {
-  const t: TileSettings = { ...defaultTiles, ...tiles };
+  const t: TileSettings = normalizeTiles(tiles);
   const g = { ...defaultGlass, ...glass };
+  const tl = { ...defaultTilt, ...tilt };
   const src = source ?? defaultSource;
 
   const rootRef = useRef<HTMLDivElement>(null);
@@ -83,17 +86,17 @@ export function GlassGridBg({
   const layout = useMemo(
     () => computeGridLayout(box.w, box.h, t),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [box.w, box.h, t.size, t.gap, t.inset, t.fit],
+    [box.w, box.h, t.size, t.gapX, t.gapY, t.inset, t.fit],
   );
 
-  const vars = tokensToStyle(t, g, src);
+  const vars = tokensToStyle(t, g, tl, src);
 
   const gridStyle: CSSProperties = {
     gridTemplateColumns: `repeat(${layout.cols}, ${layout.tileSize}px)`,
     gridAutoRows: `${layout.tileSize}px`,
-    gap: `${t.gap}px`,
-    width: layout.cols * layout.tileSize + (layout.cols - 1) * t.gap,
-    height: layout.rows * layout.tileSize + (layout.rows - 1) * t.gap,
+    gap: `${t.gapY}px ${t.gapX}px`,
+    width: layout.cols * layout.tileSize + (layout.cols - 1) * t.gapX,
+    height: layout.rows * layout.tileSize + (layout.rows - 1) * t.gapY,
     filter: effectiveQuality === 'hq' ? `url(#${filterId})` : undefined,
   };
 
@@ -110,17 +113,19 @@ export function GlassGridBg({
       data-ggb-hq-fallback={hqFallback || undefined}
       data-ggb-capped={layout.capped || undefined}
     >
-      <div className="ggb-source">
-        <BackgroundLayer source={src} />
+      <div className="ggb-surface">
+        <div className="ggb-source">
+          <BackgroundLayer source={src} />
+        </div>
+        <div className="ggb-grid" style={gridStyle} aria-hidden="true">
+          {Array.from({ length: layout.cols * layout.rows }, (_, i) => (
+            <div key={i} className="ggb-tile" />
+          ))}
+        </div>
       </div>
       {effectiveQuality === 'hq' && (
         <GlassFilters id={filterId} glass={g} tileSize={layout.tileSize} />
       )}
-      <div className="ggb-grid" style={gridStyle} aria-hidden="true">
-        {Array.from({ length: layout.cols * layout.rows }, (_, i) => (
-          <div key={i} className="ggb-tile" />
-        ))}
-      </div>
       <div className="ggb-content">{children}</div>
     </div>
   );
