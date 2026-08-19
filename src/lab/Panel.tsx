@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BEZEQ_COLORS, defaultSource } from '../component/glass/tokens';
+import { BEZEQ_COLORS, defaultDrawSource, defaultSource } from '../component/glass/tokens';
 import type {
+  DrawMotion,
   GlassGridPreset,
   GlassSettings,
   MotionSource,
@@ -18,11 +19,29 @@ import {
   TextField,
 } from './controls';
 
+export type SourceTab = 'shapes' | 'upload' | 'draw';
+
+export function categoryOf(source: MotionSource): SourceTab {
+  if (source.kind === 'shapes') return 'shapes';
+  if (source.kind === 'draw') return 'draw';
+  return 'upload';
+}
+
+export function isClosedPath(path: { x: number; y: number }[]): boolean {
+  return (
+    path.length > 2 &&
+    path[0].x === path[path.length - 1].x &&
+    path[0].y === path[path.length - 1].y
+  );
+}
+
 export type PanelProps = {
   preset: GlassGridPreset;
   onChange: (next: GlassGridPreset) => void;
   originPicking: boolean;
   onOriginPickingChange: (picking: boolean) => void;
+  tab: SourceTab;
+  onTabChange: (tab: SourceTab) => void;
 };
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
@@ -94,14 +113,6 @@ export function Panel(props: PanelProps) {
 
 /* ---- background source tabs ---- */
 
-type SourceTab = 'shapes' | 'upload' | 'draw';
-
-function categoryOf(source: MotionSource): SourceTab {
-  if (source.kind === 'shapes') return 'shapes';
-  if (source.kind === 'draw') return 'draw';
-  return 'upload';
-}
-
 const TAB_LABELS: Record<SourceTab, string> = {
   shapes: 'צורות',
   upload: 'העלאה',
@@ -109,9 +120,8 @@ const TAB_LABELS: Record<SourceTab, string> = {
 };
 
 function BackgroundTabs(props: PanelProps) {
-  const { preset, onChange } = props;
+  const { preset, onChange, tab, onTabChange } = props;
   const source = preset.source;
-  const [tab, setTab] = useState<SourceTab>(() => categoryOf(source));
   const cache = useRef<Partial<Record<SourceTab, MotionSource>>>({});
   const prevCat = useRef(categoryOf(source));
 
@@ -121,20 +131,21 @@ function BackgroundTabs(props: PanelProps) {
     // follow external source replacement (e.g. loading a preset)
     if (prevCat.current !== cat) {
       prevCat.current = cat;
-      setTab(cat);
+      onTabChange(cat);
     }
-  }, [source]);
+  }, [source, onTabChange]);
 
   const switchTab = (t: SourceTab) => {
-    setTab(t);
+    onTabChange(t);
     if (t === categoryOf(source)) return;
     const cached = cache.current[t];
     if (cached) onChange({ ...preset, source: cached });
     else if (t === 'shapes') onChange({ ...preset, source: defaultSource });
-    // upload/draw with nothing yet: current source keeps playing until content arrives
+    else if (t === 'draw') onChange({ ...preset, source: defaultDrawSource });
+    // upload with nothing yet: current source keeps playing until a file arrives
   };
 
-  const tabs: SourceTab[] = ['shapes', 'upload'];
+  const tabs: SourceTab[] = ['shapes', 'upload', 'draw'];
 
   return (
     <>
@@ -156,6 +167,88 @@ function BackgroundTabs(props: PanelProps) {
       <div role="tabpanel" id={`lab-tabpanel-${tab}`} aria-labelledby={`lab-tab-${tab}`}>
         {tab === 'shapes' && <ShapesControls {...props} />}
         {tab === 'upload' && <UploadControls {...props} />}
+        {tab === 'draw' && <DrawControls {...props} />}
+      </div>
+    </>
+  );
+}
+
+/* ---- draw tab ---- */
+
+function DrawControls({ preset, onChange }: PanelProps) {
+  const source = preset.source;
+  if (source.kind !== 'draw') return null;
+  const patchDraw = (patch: Partial<Extract<MotionSource, { kind: 'draw' }>>) =>
+    onChange({ ...preset, source: { ...source, ...patch } });
+
+  const closed = isClosedPath(source.path);
+  const toggleClose = (on: boolean) => {
+    if (source.path.length < 3) return;
+    if (on && !closed) patchDraw({ path: [...source.path, source.path[0]] });
+    else if (!on && closed) patchDraw({ path: source.path.slice(0, -1) });
+  };
+
+  const m = source.motion;
+  const setMotionType = (type: DrawMotion['type']) => {
+    const motion: DrawMotion =
+      type === 'path'
+        ? { type: 'path', speed: m.speed }
+        : type === 'pulse'
+          ? { type: 'pulse', speed: m.speed, scale: 1.5 }
+          : { type: 'drift', speed: m.speed, amplitude: 24 };
+    patchDraw({ motion });
+  };
+
+  return (
+    <>
+      <p className="lab-note" role="note">
+        לצייר ישירות על התצוגה — הקו מתווסף לשכבת הרקע
+      </p>
+      <Slider label="עובי קו" min={1} max={40} value={source.stroke} unit="px" onChange={(v) => patchDraw({ stroke: v })} />
+      <ColorField label="צבע" value={source.color} onChange={(v) => patchDraw({ color: v })} />
+      <CheckboxField label="סגירת מסלול" checked={closed} onChange={toggleClose} />
+      <SelectField
+        label="תנועה"
+        value={m.type}
+        options={[
+          { value: 'path', label: 'מסע לאורך המסלול' },
+          { value: 'pulse', label: 'פעימה' },
+          { value: 'drift', label: 'ריחוף' },
+        ]}
+        onChange={setMotionType}
+      />
+      <Slider
+        label="מהירות"
+        min={0.1}
+        max={3}
+        step={0.1}
+        value={m.speed}
+        onChange={(v) => patchDraw({ motion: { ...m, speed: v } })}
+      />
+      {m.type === 'pulse' && (
+        <Slider
+          label="קנה מידה"
+          min={1}
+          max={3}
+          step={0.1}
+          value={m.scale}
+          onChange={(v) => patchDraw({ motion: { ...m, scale: v } })}
+        />
+      )}
+      {m.type === 'drift' && (
+        <Slider
+          label="משרעת"
+          min={0}
+          max={120}
+          value={m.amplitude}
+          unit="px"
+          onChange={(v) => patchDraw({ motion: { ...m, amplitude: v } })}
+        />
+      )}
+      <div className="lab-actions">
+        <button type="button" className="lab-button" onClick={() => patchDraw({ path: [] })}>
+          ניקוי הציור
+        </button>
       </div>
     </>
   );

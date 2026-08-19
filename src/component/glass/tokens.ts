@@ -100,6 +100,14 @@ export const defaultShapes: ShapesPreset = {
 
 export const defaultSource: MotionSource = { kind: 'shapes', preset: defaultShapes };
 
+export const defaultDrawSource: MotionSource = {
+  kind: 'draw',
+  path: [],
+  stroke: 6,
+  color: '#F74A84',
+  motion: { type: 'path', speed: 1 },
+};
+
 export const defaultPreset: GlassGridPreset = {
   tiles: defaultTiles,
   glass: defaultGlass,

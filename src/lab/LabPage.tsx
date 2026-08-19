@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { GlassGridBg, computeGridLayout } from '../component/GlassGridBg';
-import type { GlassGridPreset } from '../component/glass/tokens';
+import type { GlassGridPreset, Point } from '../component/glass/tokens';
 import { useReducedMotion } from '../component/layers/useReducedMotion';
 import defaultPresetJson from '../../presets/default.json';
-import { Panel } from './Panel';
+import { Panel, categoryOf, isClosedPath } from './Panel';
+import type { SourceTab } from './Panel';
+import { DrawCanvas } from './DrawCanvas';
 import './lab.css';
 
 const bezeqDefault = defaultPresetJson as unknown as GlassGridPreset;
@@ -11,6 +13,7 @@ const bezeqDefault = defaultPresetJson as unknown as GlassGridPreset;
 export default function LabPage() {
   const [preset, setPreset] = useState<GlassGridPreset>(bezeqDefault);
   const [originPicking, setOriginPicking] = useState(false);
+  const [tab, setTab] = useState<SourceTab>(() => categoryOf(bezeqDefault.source));
   const previewRef = useRef<HTMLDivElement>(null);
   const [previewBox, setPreviewBox] = useState({ w: 484, h: 484 });
   const reduced = useReducedMotion();
@@ -55,6 +58,8 @@ export default function LabPage() {
         onChange={setPreset}
         originPicking={originPicking}
         onOriginPickingChange={setOriginPicking}
+        tab={tab}
+        onTabChange={setTab}
       />
       <main className="lab-stage">
         <header className="lab-stage-header">
@@ -90,6 +95,18 @@ export default function LabPage() {
               </button>
             </div>
           </GlassGridBg>
+          {tab === 'draw' && preset.source.kind === 'draw' && !originPicking && (
+            <DrawCanvas
+              stroke={preset.source.stroke}
+              color={preset.source.color}
+              closeOnCommit={isClosedPath(preset.source.path)}
+              onCommit={(path: Point[]) => {
+                if (preset.source.kind === 'draw') {
+                  setPreset({ ...preset, source: { ...preset.source, path } });
+                }
+              }}
+            />
+          )}
           {originPicking && (
             <button
               type="button"
