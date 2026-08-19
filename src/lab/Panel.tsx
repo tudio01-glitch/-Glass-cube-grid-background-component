@@ -12,6 +12,7 @@ import type {
   GlassGridPreset,
   GlassSettings,
   MotionSource,
+  PointerTiltSettings,
   ReliefSettings,
   ShapesPreset,
   TileSettings,
@@ -81,8 +82,10 @@ export function Panel(props: PanelProps) {
     onChange({ ...preset, glass: { ...preset.glass, ...patch } });
   const patchTilt = (patch: Partial<TiltSettings>) =>
     onChange({ ...preset, tilt: { ...preset.tilt, ...patch } });
+  const patchPointerTilt = (patch: Partial<PointerTiltSettings>) =>
+    onChange({ ...preset, pointerTilt: { ...preset.pointerTilt, ...patch } });
 
-  const { tiles, glass, tilt } = preset;
+  const { tiles, glass, tilt, pointerTilt } = preset;
 
   return (
     <aside className="lab-panel" aria-label="הגדרות">
@@ -142,6 +145,37 @@ export function Panel(props: PanelProps) {
           unit="px"
           onChange={(v) => patchTilt({ perspective: v })}
         />
+
+        <h4 className="lab-subtitle">תגובה לעכבר — tilt חי לכל הכיוונים</h4>
+        <SelectField
+          label="מצב"
+          value={pointerTilt.mode}
+          options={[
+            { value: 'off', label: 'כבוי' },
+            { value: 'tiles', label: 'אריחים — כל אריח נוטה לסמן' },
+            { value: 'surface', label: 'כל המשטח נוטה יחד' },
+          ]}
+          onChange={(v) => patchPointerTilt({ mode: v })}
+        />
+        {pointerTilt.mode !== 'off' && (
+          <Slider
+            label="עוצמה"
+            min={0}
+            max={100}
+            value={pointerTilt.strength}
+            onChange={(v) => patchPointerTilt({ strength: v })}
+          />
+        )}
+        {pointerTilt.mode === 'tiles' && (
+          <Slider
+            label="רדיוס"
+            min={10}
+            max={100}
+            value={pointerTilt.radius}
+            unit="%"
+            onChange={(v) => patchPointerTilt({ radius: v })}
+          />
+        )}
       </Group>
 
       <Group title="רקע">

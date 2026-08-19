@@ -31,6 +31,7 @@ import { GlassGridBg } from './src/component/GlassGridBg';
   tiles={{ size: 64, gapX: 6, gapY: 6, radius: 10 }} // `gap` still works as a shorthand for both axes
   glass={{ refraction: 100, dispersion: 100, depth: 100, frost: 0, splay: 100 }}
   tilt={{ x: 18, y: -12, perspective: 900 }} // 3D tilt of the whole glass surface
+  pointerTilt={{ mode: 'tiles', strength: 55, radius: 45 }} // cursor-driven tilt
   relief={{ shape: 'round', area: 78, height: 55 }} // per-tile bump: round / rect / dome
   weave={{ mode: 'dome', height: 60, heightmap: null }} // global relief across all tiles
   source={{
@@ -100,6 +101,8 @@ Every token can be overridden per instance.
 | `--ggb-tilt-x` | `tilt.x` | `0` (deg, rotateX) |
 | `--ggb-tilt-y` | `tilt.y` | `0` (deg, rotateY) |
 | `--ggb-perspective` | `tilt.perspective` | `900px` |
+| `--ggb-ptr-strength` | `pointerTilt.strength` | `55` |
+| `--ggb-ptr-radius` | `pointerTilt.radius` | `45` (% of min side) |
 | `--ggb-relief-area` | `relief.area` | `78` (% of tile the bump covers) |
 | `--ggb-relief-height` | `relief.height` | `55` (bump intensity) |
 | `--ggb-weave-height` | `weave.height` | `50` (global relief strength) |
@@ -108,6 +111,14 @@ Every token can be overridden per instance.
 
 Tilt tips the source + grid as one plane (`perspective → rotateX/rotateY`) with an
 automatic zoom compensation so the tipped surface keeps covering the container.
+
+**Pointer tilt** reacts to the mouse in every direction (on by default, mode `tiles`):
+in `tiles` mode each tile rotates toward the cursor with a distance falloff (`radius`
+sets the influence circle, `strength` the maximum angle), so the grid bends around the
+pointer; in `surface` mode the whole plane tips after the static tilt. Values are
+written straight to per-tile CSS variables from one rAF-throttled listener — no React
+re-renders — and everything eases back when the cursor leaves. Honors
+`prefers-reduced-motion` (the effect simply stays off).
 
 ### Relief & weave
 

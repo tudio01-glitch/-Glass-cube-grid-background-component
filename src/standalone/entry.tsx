@@ -27,6 +27,7 @@ createRoot(host!).render(
       tiles={preset.tiles}
       glass={preset.glass}
       tilt={preset.tilt}
+      pointerTilt={preset.pointerTilt}
       relief={preset.relief}
       weave={preset.weave}
       source={preset.source}

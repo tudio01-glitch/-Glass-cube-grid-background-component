@@ -24,6 +24,11 @@
     "y": 0,
     "perspective": 900
   },
+  "pointerTilt": {
+    "mode": "tiles",
+    "strength": 55,
+    "radius": 45
+  },
   "relief": {
     "shape": "round",
     "area": 78,

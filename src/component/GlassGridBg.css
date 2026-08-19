@@ -18,6 +18,11 @@
   --ggb-relief-area: 78;
   --ggb-relief-height: 55;
   --ggb-weave-height: 50;
+  --ggb-ptr-strength: 55;
+  --ggb-ptr-radius: 45;
+  /* live cursor position (-1..1), written by the pointer-tilt loop */
+  --ggb-ptr-x: 0;
+  --ggb-ptr-y: 0;
   --ggb-frost: 0;
   --ggb-refraction: 100;
   --ggb-dispersion: 100;
@@ -43,20 +48,33 @@
   --ggb-light-grad-angle: calc(180deg + var(--ggb-light-angle) * 1deg);
   --ggb-relief-h: calc(var(--ggb-relief-height) / 100);
   --ggb-weave-h: calc(var(--ggb-weave-height) / 100);
+  --ggb-ptr-surface-max: calc(var(--ggb-ptr-strength) * 0.14); /* deg at full deflection */
   /* tilt zoom compensation so the tipped plane keeps covering the box */
   --ggb-tilt-x-abs: max(var(--ggb-tilt-x), calc(-1 * var(--ggb-tilt-x)));
   --ggb-tilt-y-abs: max(var(--ggb-tilt-y), calc(-1 * var(--ggb-tilt-y)));
   --ggb-tilt-zoom: calc(1 + (var(--ggb-tilt-x-abs) + var(--ggb-tilt-y-abs)) / 150);
 }
 
-/* 0. the tilted surface: source + grid move as one plane; content stays flat */
+/* 0. the tilted surface: source + grid move as one plane; content stays flat.
+   In pointer-surface mode the cursor tips the plane on top of the static tilt. */
 .ggb-surface {
   position: absolute;
   inset: 0;
   z-index: 0;
-  transform: perspective(var(--ggb-perspective)) rotateX(calc(var(--ggb-tilt-x) * 1deg))
-    rotateY(calc(var(--ggb-tilt-y) * 1deg)) scale(var(--ggb-tilt-zoom));
+  transform: perspective(var(--ggb-perspective))
+    rotateX(calc((var(--ggb-tilt-x) + var(--ggb-ptr-y) * var(--ggb-ptr-surface-active, 0) * -1) * 1deg))
+    rotateY(calc((var(--ggb-tilt-y) + var(--ggb-ptr-x) * var(--ggb-ptr-surface-active, 0)) * 1deg))
+    scale(var(--ggb-tilt-zoom));
   transform-origin: 50% 50%;
+  transition: transform 0.2s ease-out;
+}
+
+.ggb--ptr-surface {
+  --ggb-ptr-surface-active: var(--ggb-ptr-surface-max);
+  /* extra zoom headroom so the cursor-tipped plane keeps covering the box */
+  --ggb-tilt-zoom: calc(
+    1 + (var(--ggb-tilt-x-abs) + var(--ggb-tilt-y-abs) + var(--ggb-ptr-surface-max)) / 150
+  );
 }
 
 /* 1. motion layer */
@@ -209,19 +227,28 @@
 }
 
 /*
- * weave: the global relief. Each tile carries its sampled height in --ggb-h;
- * scale + lift + elevation shadow make neighbouring tiles read as one
- * continuous embossed surface.
+ * Tile transform stack:
+ * - pointer tilt (--ggb-ptr-rx/--ggb-ptr-ry, deg, written per tile by the
+ *   pointer loop): each tile rotates toward the cursor in every direction;
+ * - weave (--ggb-h, 0-1): scale + lift so neighbouring tiles read as one
+ *   continuous embossed surface.
+ * Everything defaults to 0, so the rule is inert until a feature is active.
  */
-.ggb--weave .ggb-tile {
-  transform: translateY(calc(var(--ggb-h, 0) * var(--ggb-weave-h) * -8px))
+.ggb-tile {
+  transform: perspective(600px) rotateX(calc(var(--ggb-ptr-rx, 0) * 1deg))
+    rotateY(calc(var(--ggb-ptr-ry, 0) * 1deg))
+    translateY(calc(var(--ggb-h, 0) * var(--ggb-weave-h) * -8px))
     scale(calc(1 + var(--ggb-h, 0) * var(--ggb-weave-h) * 0.28));
+  transition: transform 0.18s ease-out;
+}
+
+.ggb--weave .ggb-tile {
   z-index: calc(var(--ggb-h, 0) * 100);
-  transition: transform 0.25s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ggb--weave .ggb-tile {
+  .ggb-tile,
+  .ggb-surface {
     transition: none;
   }
 }

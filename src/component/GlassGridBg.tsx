@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import {
   MAX_TILES,
   defaultGlass,
+  defaultPointerTilt,
   defaultRelief,
   defaultSource,
   defaultTilt,
@@ -16,6 +17,7 @@ import type {
   TileSettings,
   WeaveSettings,
 } from './glass/tokens';
+import { useReducedMotion } from './layers/useReducedMotion';
 import { BackgroundLayer } from './layers/BackgroundLayer';
 import { GlassFilters, supportsHqGlass } from './glass/GlassFilters';
 import './GlassGridBg.css';
@@ -85,6 +87,7 @@ export function GlassGridBg({
   tiles,
   glass,
   tilt,
+  pointerTilt,
   relief,
   weave,
   source,
@@ -95,9 +98,11 @@ export function GlassGridBg({
   const t: TileSettings = normalizeTiles(tiles);
   const g = { ...defaultGlass, ...glass };
   const tl = { ...defaultTilt, ...tilt };
+  const pt = { ...defaultPointerTilt, ...pointerTilt };
   const rl = { ...defaultRelief, ...relief };
   const wv = { ...defaultWeave, ...weave };
   const src = source ?? defaultSource;
+  const reduced = useReducedMotion();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -126,7 +131,94 @@ export function GlassGridBg({
     [box.w, box.h, t.size, t.gapX, t.gapY, t.inset, t.fit],
   );
 
-  const vars = tokensToStyle(t, g, tl, src, rl, wv);
+  const vars = tokensToStyle(t, g, tl, src, rl, wv, pt);
+
+  /*
+   * Pointer tilt. 'tiles': every tile rotates toward the cursor with a
+   * distance falloff, so the grid bends around the pointer in every
+   * direction. 'surface': the whole plane tips after the static tilt.
+   * Written straight to CSS vars (no React state) to stay cheap per frame.
+   */
+  const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    const grid = gridRef.current;
+    if (!root || !grid || pt.mode === 'off' || reduced) return;
+    let raf = 0;
+    let cursor: { x: number; y: number } | null = null;
+
+    const clearTiles = () => {
+      for (const child of Array.from(grid.children)) {
+        const el = child as HTMLElement;
+        el.style.removeProperty('--ggb-ptr-rx');
+        el.style.removeProperty('--ggb-ptr-ry');
+      }
+    };
+
+    const apply = () => {
+      raf = 0;
+      if (pt.mode === 'surface') {
+        if (!cursor) {
+          root.style.setProperty('--ggb-ptr-x', '0');
+          root.style.setProperty('--ggb-ptr-y', '0');
+          return;
+        }
+        const r = root.getBoundingClientRect();
+        root.style.setProperty('--ggb-ptr-x', (((cursor.x - r.left) / r.width) * 2 - 1).toFixed(3));
+        root.style.setProperty('--ggb-ptr-y', (((cursor.y - r.top) / r.height) * 2 - 1).toFixed(3));
+        return;
+      }
+      if (!cursor) {
+        clearTiles();
+        return;
+      }
+      const r = root.getBoundingClientRect();
+      const px = cursor.x - r.left;
+      const py = cursor.y - r.top;
+      const gridW = layout.cols * layout.tileSize + (layout.cols - 1) * t.gapX;
+      const gridH = layout.rows * layout.tileSize + (layout.rows - 1) * t.gapY;
+      const originX = t.fit === 'fixed' ? t.inset : (r.width - gridW) / 2;
+      const originY = t.fit === 'fixed' ? t.inset : (r.height - gridH) / 2;
+      const radiusPx = Math.max(40, (pt.radius / 100) * Math.min(r.width, r.height));
+      const maxDeg = (pt.strength / 100) * 28;
+      const children = grid.children;
+      for (let i = 0; i < children.length; i++) {
+        const col = i % layout.cols;
+        const row = (i / layout.cols) | 0;
+        const cx = originX + col * (layout.tileSize + t.gapX) + layout.tileSize / 2;
+        const cy = originY + row * (layout.tileSize + t.gapY) + layout.tileSize / 2;
+        const dx = px - cx;
+        const dy = py - cy;
+        const influence = Math.max(0, 1 - Math.hypot(dx, dy) / radiusPx);
+        const el = children[i] as HTMLElement;
+        el.style.setProperty('--ggb-ptr-rx', ((dy / radiusPx) * maxDeg * influence).toFixed(2));
+        el.style.setProperty('--ggb-ptr-ry', ((-dx / radiusPx) * maxDeg * influence).toFixed(2));
+      }
+    };
+
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    const onMove = (e: PointerEvent) => {
+      cursor = { x: e.clientX, y: e.clientY };
+      schedule();
+    };
+    const onLeave = () => {
+      cursor = null;
+      schedule();
+    };
+    root.addEventListener('pointermove', onMove);
+    root.addEventListener('pointerleave', onLeave);
+    return () => {
+      root.removeEventListener('pointermove', onMove);
+      root.removeEventListener('pointerleave', onLeave);
+      if (raf) cancelAnimationFrame(raf);
+      clearTiles();
+      root.style.removeProperty('--ggb-ptr-x');
+      root.style.removeProperty('--ggb-ptr-y');
+    };
+     
+  }, [pt.mode, pt.strength, pt.radius, reduced, layout, t.gapX, t.gapY, t.inset, t.fit]);
 
   const weaveActive = wv.mode !== 'off';
   const tileHeights = useMemo(() => {
@@ -158,6 +250,7 @@ export function GlassGridBg({
   ];
   if (g.frost <= 0) classes.push('ggb--frost-0');
   if (weaveActive) classes.push('ggb--weave');
+  if (pt.mode !== 'off' && !reduced) classes.push(`ggb--ptr-${pt.mode}`);
   if (className) classes.push(className);
 
   return (
@@ -173,7 +266,7 @@ export function GlassGridBg({
         <div className="ggb-source">
           <BackgroundLayer source={src} />
         </div>
-        <div className="ggb-grid" style={gridStyle} aria-hidden="true">
+        <div ref={gridRef} className="ggb-grid" style={gridStyle} aria-hidden="true">
           {Array.from({ length: layout.cols * layout.rows }, (_, i) => (
             <div
               key={i}

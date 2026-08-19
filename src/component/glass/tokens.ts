@@ -21,6 +21,17 @@ export type TiltSettings = {
   perspective: number; // px. default 900
 };
 
+/**
+ * Pointer-driven tilt: the cursor tips tiles in every direction.
+ * 'tiles' rotates each tile toward the cursor with a distance falloff;
+ * 'surface' tips the whole plane after the static tilt.
+ */
+export type PointerTiltSettings = {
+  mode: 'off' | 'tiles' | 'surface';
+  strength: number; // 0-100 -> up to ~28deg per tile / ~14deg surface. default 55
+  radius: number; // 0-100, cursor influence radius as % of min side (tiles mode). default 45
+};
+
 /** The embossed bump at the center of every tile. */
 export type ReliefSettings = {
   shape: 'round' | 'rect' | 'dome'; // circular / follows tile corners / amorphous dome
@@ -81,6 +92,7 @@ export type GlassGridBgProps = {
   tiles?: TileSettingsInput;
   glass?: Partial<GlassSettings>;
   tilt?: Partial<TiltSettings>; // 3D tilt of the whole glass surface
+  pointerTilt?: Partial<PointerTiltSettings>; // cursor-driven tilt
   relief?: Partial<ReliefSettings>; // per-tile bump
   weave?: Partial<WeaveSettings>; // global relief across all tiles
   source?: MotionSource; // what moves behind the glass
@@ -94,6 +106,7 @@ export type GlassGridPreset = {
   tiles: TileSettings;
   glass: GlassSettings;
   tilt: TiltSettings;
+  pointerTilt: PointerTiltSettings;
   relief: ReliefSettings;
   weave: WeaveSettings;
   source: MotionSource;
@@ -118,6 +131,12 @@ export const defaultTilt: TiltSettings = {
   x: 0,
   y: 0,
   perspective: 900,
+};
+
+export const defaultPointerTilt: PointerTiltSettings = {
+  mode: 'tiles',
+  strength: 55,
+  radius: 45,
 };
 
 export const defaultRelief: ReliefSettings = {
@@ -179,6 +198,7 @@ export const defaultPreset: GlassGridPreset = {
   tiles: defaultTiles,
   glass: defaultGlass,
   tilt: defaultTilt,
+  pointerTilt: defaultPointerTilt,
   relief: defaultRelief,
   weave: defaultWeave,
   source: defaultSource,
@@ -191,6 +211,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     tiles?: TileSettingsInput;
     glass?: Partial<GlassSettings>;
     tilt?: Partial<TiltSettings>;
+    pointerTilt?: Partial<PointerTiltSettings>;
     relief?: Partial<ReliefSettings>;
     weave?: Partial<WeaveSettings>;
     source?: MotionSource;
@@ -200,6 +221,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     tiles: normalizeTiles(p.tiles),
     glass: { ...defaultGlass, ...p.glass },
     tilt: { ...defaultTilt, ...p.tilt },
+    pointerTilt: { ...defaultPointerTilt, ...p.pointerTilt },
     relief: { ...defaultRelief, ...p.relief },
     weave: { ...defaultWeave, ...p.weave },
     source: p.source ?? defaultSource,
@@ -230,6 +252,7 @@ export function tokensToCssVars(
   source: MotionSource,
   relief: ReliefSettings = defaultRelief,
   weave: WeaveSettings = defaultWeave,
+  pointerTilt: PointerTiltSettings = defaultPointerTilt,
 ): Record<string, string> {
   const colors =
     source.kind === 'shapes' && source.preset.colors.length > 0
@@ -253,6 +276,8 @@ export function tokensToCssVars(
     '--ggb-relief-area': String(relief.area),
     '--ggb-relief-height': String(relief.height),
     '--ggb-weave-height': String(weave.height),
+    '--ggb-ptr-strength': String(pointerTilt.strength),
+    '--ggb-ptr-radius': String(pointerTilt.radius),
     '--ggb-light-angle': String(glass.lightAngle),
     '--ggb-light-intensity': String(glass.lightIntensity),
     '--ggb-opacity': String(glass.opacity),
@@ -272,6 +297,7 @@ export function tokensToStyle(
   source: MotionSource,
   relief: ReliefSettings = defaultRelief,
   weave: WeaveSettings = defaultWeave,
+  pointerTilt: PointerTiltSettings = defaultPointerTilt,
 ): CSSProperties {
-  return tokensToCssVars(tiles, glass, tilt, source, relief, weave) as CSSProperties;
+  return tokensToCssVars(tiles, glass, tilt, source, relief, weave, pointerTilt) as CSSProperties;
 }
