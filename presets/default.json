@@ -24,16 +24,34 @@
     "y": 0,
     "perspective": 900
   },
+  "relief": {
+    "shape": "round",
+    "area": 78,
+    "height": 55
+  },
+  "weave": {
+    "mode": "off",
+    "height": 50,
+    "heightmap": null
+  },
   "source": {
     "kind": "shapes",
     "preset": {
       "shape": "sine",
-      "colors": ["#F74A84", "#2A73F0", "#52B9F0", "#0B0B33"],
+      "colors": [
+        "#F74A84",
+        "#2A73F0",
+        "#52B9F0",
+        "#0B0B33"
+      ],
       "size": 30,
       "count": 6,
       "speed": 1,
       "blur": 20,
-      "origin": { "x": 0.5, "y": 0.5 }
+      "origin": {
+        "x": 0.5,
+        "y": 0.5
+      }
     }
   },
   "quality": "css"

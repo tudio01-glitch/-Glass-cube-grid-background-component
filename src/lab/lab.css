@@ -420,3 +420,11 @@ body {
   block-size: 15px;
   accent-color: #f74a84;
 }
+
+/* sub-section heading inside a group */
+.lab-subtitle {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7f86b3;
+}

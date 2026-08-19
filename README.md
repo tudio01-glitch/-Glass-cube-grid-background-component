@@ -31,6 +31,8 @@ import { GlassGridBg } from './src/component/GlassGridBg';
   tiles={{ size: 64, gapX: 6, gapY: 6, radius: 10 }} // `gap` still works as a shorthand for both axes
   glass={{ refraction: 100, dispersion: 100, depth: 100, frost: 0, splay: 100 }}
   tilt={{ x: 18, y: -12, perspective: 900 }} // 3D tilt of the whole glass surface
+  relief={{ shape: 'round', area: 78, height: 55 }} // per-tile bump: round / rect / dome
+  weave={{ mode: 'dome', height: 60, heightmap: null }} // global relief across all tiles
   source={{
     kind: 'shapes',
     preset: {
@@ -98,11 +100,30 @@ Every token can be overridden per instance.
 | `--ggb-tilt-x` | `tilt.x` | `0` (deg, rotateX) |
 | `--ggb-tilt-y` | `tilt.y` | `0` (deg, rotateY) |
 | `--ggb-perspective` | `tilt.perspective` | `900px` |
+| `--ggb-relief-area` | `relief.area` | `78` (% of tile the bump covers) |
+| `--ggb-relief-height` | `relief.height` | `55` (bump intensity) |
+| `--ggb-weave-height` | `weave.height` | `50` (global relief strength) |
 | `--ggb-color-1..4` | shapes palette | Bezeq: `#F74A84` `#2A73F0` `#52B9F0` `#0B0B33` |
 | `--ggb-speed` | source speed | `1` |
 
 Tilt tips the source + grid as one plane (`perspective → rotateX/rotateY`) with an
 automatic zoom compensation so the tipped surface keeps covering the container.
+
+### Relief & weave
+
+Every tile carries an embossed bump ("relief"): `shape` picks the silhouette —
+`round` (circle), `rect` (follows the tile corners) or `dome` (amorphous organic
+blobs, varied across the grid); `area` sets how much of the tile it covers and
+`height` how strongly it reads. The bump is lit by the same light-angle tokens
+as the rest of the glass.
+
+The **weave** is a global relief: one height field spanning the whole grid, so
+tiles rise together as a single embossed surface instead of independent units.
+Modes: `off`, `dome` (built-in), or `file` — the lab can load a 3D model
+(`.obj` / `.stl`), project it into a normalized heightmap and spread it across
+all tiles (each tile samples its height bilinearly and scales/lifts/brightens
+accordingly). The heightmap is serialized into the preset, so it travels
+through save/export like everything else.
 
 The Bezeq default preset lives in `presets/default.json` (tutorial values: refraction 100,
 depth 100, dispersion 100, frost 0, splay 100, light −45° / 80%, `sine` warp 0→5 over ~10s).
@@ -121,10 +142,17 @@ keyboard operable and `prefers-reduced-motion` freezes the source layer on its f
 ## Export
 
 - **להעתיק טוקני CSS** — copies the current state as a `--ggb-*` custom-property block.
-- **להעתיק JSON** — copies the full preset (tiles + glass + source + quality).
+- **להעתיק JSON** — copies the full preset (tiles + glass + tilt + relief + weave +
+  source + quality).
 - **להוריד HTML עצמאי** — asks the dev server to run the esbuild export with the current
   preset baked in (uploads travel inline as base64 data URLs) and downloads one
   self-contained HTML file that opens offline — ready for upload to Claude Design.
+- **להעתיק קוד מלא לשיבוץ** — copies a full self-contained embed fragment (host `div` +
+  inline styles + bundle with the preset baked in) to the clipboard, ready to paste into
+  any other page; the component mounts inside the host div and stays within it.
+- **לשמור את הנראות בריפו** (presets group) — persists the current look into
+  `presets/default.json` in the repo via a dev-server endpoint, so it becomes the default
+  for everyone on the next run.
 
 The exported file contains no texts or buttons by default; the lab's toggle (or the CLI
 `--sample` flag) bakes the sample content in.
@@ -134,4 +162,5 @@ CLI equivalent:
 ```bash
 npm run export -- --preset presets/default.json --out dist/glass-grid-bg.standalone.html
 # add --sample to include the sample headline + button
+# add --embed to emit the paste-anywhere fragment instead of a full page
 ```

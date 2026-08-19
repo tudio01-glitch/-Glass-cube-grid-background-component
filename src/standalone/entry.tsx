@@ -8,6 +8,7 @@ declare global {
   interface Window {
     __GGB_PRESET__?: GlassGridPreset;
     __GGB_SAMPLE__?: boolean;
+    __GGB_MOUNT__?: string; // embed mode: CSS selector of the host element
   }
 }
 
@@ -15,16 +16,22 @@ declare global {
 const preset = normalizePreset(window.__GGB_PRESET__ ?? defaultPreset);
 // default: pure background, no texts or buttons
 const withSample = window.__GGB_SAMPLE__ === true;
+const mountSelector = window.__GGB_MOUNT__;
+const host =
+  (mountSelector ? document.querySelector(mountSelector) : null) ??
+  document.getElementById('root');
 
-createRoot(document.getElementById('root')!).render(
+createRoot(host!).render(
   <StrictMode>
     <GlassGridBg
       tiles={preset.tiles}
       glass={preset.glass}
       tilt={preset.tilt}
+      relief={preset.relief}
+      weave={preset.weave}
       source={preset.source}
       quality={preset.quality}
-      className="ggb-standalone"
+      className={mountSelector ? 'ggb-embed' : 'ggb-standalone'}
     >
       {withSample && (
         <div className="ggb-standalone-content">

@@ -15,6 +15,9 @@
   --ggb-tilt-x: 0;
   --ggb-tilt-y: 0;
   --ggb-perspective: 900px;
+  --ggb-relief-area: 78;
+  --ggb-relief-height: 55;
+  --ggb-weave-height: 50;
   --ggb-frost: 0;
   --ggb-refraction: 100;
   --ggb-dispersion: 100;
@@ -38,6 +41,8 @@
   --ggb-dispersion-a: calc(var(--ggb-dispersion) / 100);
   --ggb-splay-px: calc(var(--ggb-splay) / 100 * var(--ggb-tile-size) * 0.28);
   --ggb-light-grad-angle: calc(180deg + var(--ggb-light-angle) * 1deg);
+  --ggb-relief-h: calc(var(--ggb-relief-height) / 100);
+  --ggb-weave-h: calc(var(--ggb-weave-height) / 100);
   /* tilt zoom compensation so the tipped plane keeps covering the box */
   --ggb-tilt-x-abs: max(var(--ggb-tilt-x), calc(-1 * var(--ggb-tilt-x)));
   --ggb-tilt-y-abs: max(var(--ggb-tilt-y), calc(-1 * var(--ggb-tilt-y)));
@@ -115,7 +120,11 @@
       rgba(11, 11, 51, calc(var(--ggb-refraction-a) * 0.18)),
     /* dispersion: 1px chroma-fringed rings offset in opposite directions */
     inset 1px 1px 0 0 rgba(255, 64, 96, calc(var(--ggb-dispersion-a) * 0.35)),
-    inset -1px -1px 0 0 rgba(64, 224, 255, calc(var(--ggb-dispersion-a) * 0.35));
+    inset -1px -1px 0 0 rgba(64, 224, 255, calc(var(--ggb-dispersion-a) * 0.35)),
+    /* weave elevation (zero unless the tile carries --ggb-h) */
+    0 calc(var(--ggb-h, 0) * var(--ggb-weave-h) * 12px)
+      calc(var(--ggb-h, 0) * var(--ggb-weave-h) * 18px)
+      rgba(11, 11, 51, calc(var(--ggb-h, 0) * 0.35));
 }
 
 /* frost 0: skip the backdrop snapshot entirely — big win at 200+ tiles */
@@ -139,22 +148,51 @@
   -webkit-backdrop-filter: blur(var(--ggb-frost-px)) saturate(1.2);
 }
 
-/* refraction: inner edge gradient — reads as the glass bending its backdrop */
+/*
+ * relief: the embossed bump at the center of the tile.
+ * area sets how much of the tile it covers, height how strongly it reads,
+ * and the shape class (round / rect / dome) sets its silhouette.
+ */
 .ggb-tile::before {
   content: '';
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
+  inset: calc((100 - var(--ggb-relief-area)) * 0.5%);
+  border-radius: 50%;
   pointer-events: none;
-  background: radial-gradient(
-    closest-side at 50% 50%,
-    transparent calc(100% - var(--ggb-splay-px) * 2),
-    rgba(255, 255, 255, calc(var(--ggb-refraction-a) * 0.22)) calc(100% - var(--ggb-splay-px) * 0.4),
-    rgba(255, 255, 255, calc(var(--ggb-refraction-a) * 0.05)) 100%
+  background: linear-gradient(
+    var(--ggb-light-grad-angle),
+    rgba(255, 255, 255, calc(var(--ggb-relief-h) * var(--ggb-light-a) * 0.42)) 0%,
+    rgba(255, 255, 255, calc(var(--ggb-relief-h) * var(--ggb-light-a) * 0.1)) 40%,
+    rgba(255, 255, 255, 0) 55%,
+    rgba(11, 11, 51, calc(var(--ggb-relief-h) * 0.28)) 100%
   );
+  box-shadow:
+    /* glassy ring hugging the bump silhouette */
+    inset 0 0 calc(var(--ggb-splay-px) * 0.7) rgba(255, 255, 255, calc(var(--ggb-refraction-a) * var(--ggb-relief-h) * 0.35)),
+    /* lift off the tile floor */
+    0 calc(var(--ggb-relief-h) * 3px) calc(var(--ggb-relief-h) * 7px)
+      rgba(11, 11, 51, calc(var(--ggb-relief-h) * 0.3));
 }
 
-/* light: directional highlight, angle + intensity driven */
+.ggb--relief-rect .ggb-tile::before {
+  border-radius: min(var(--ggb-tile-radius), 45%);
+}
+
+/* amorphous dome: organic blob silhouettes, varied across the grid */
+.ggb--relief-dome .ggb-tile::before {
+  border-radius: 43% 57% 61% 39% / 54% 45% 57% 46%;
+}
+
+.ggb--relief-dome .ggb-tile:nth-child(3n)::before {
+  border-radius: 61% 39% 47% 53% / 42% 58% 44% 56%;
+}
+
+.ggb--relief-dome .ggb-tile:nth-child(3n + 1)::before {
+  border-radius: 52% 48% 38% 62% / 60% 41% 59% 40%;
+}
+
+/* light: directional highlight, angle + intensity driven.
+   --ggb-h (0-1, set per tile when a weave is active) brightens raised tiles. */
 .ggb-tile::after {
   content: '';
   position: absolute;
@@ -163,11 +201,29 @@
   pointer-events: none;
   background: linear-gradient(
     var(--ggb-light-grad-angle),
-    rgba(255, 255, 255, calc(var(--ggb-light-a) * 0.28)) 0%,
+    rgba(255, 255, 255, calc(var(--ggb-light-a) * (0.28 + var(--ggb-h, 0) * var(--ggb-weave-h) * 0.4))) 0%,
     rgba(255, 255, 255, calc(var(--ggb-light-a) * 0.07)) 38%,
     rgba(255, 255, 255, 0) 58%,
     rgba(11, 11, 51, calc(var(--ggb-light-a) * 0.12)) 100%
   );
+}
+
+/*
+ * weave: the global relief. Each tile carries its sampled height in --ggb-h;
+ * scale + lift + elevation shadow make neighbouring tiles read as one
+ * continuous embossed surface.
+ */
+.ggb--weave .ggb-tile {
+  transform: translateY(calc(var(--ggb-h, 0) * var(--ggb-weave-h) * -8px))
+    scale(calc(1 + var(--ggb-h, 0) * var(--ggb-weave-h) * 0.28));
+  z-index: calc(var(--ggb-h, 0) * 100);
+  transition: transform 0.25s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ggb--weave .ggb-tile {
+    transition: none;
+  }
 }
 
 /* 3. container content */

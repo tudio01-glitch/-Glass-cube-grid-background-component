@@ -106,6 +106,8 @@ export default function LabPage() {
             tiles={preset.tiles}
             glass={preset.glass}
             tilt={preset.tilt}
+            relief={preset.relief}
+            weave={preset.weave}
             source={preset.source}
             quality={preset.quality}
             className="lab-preview-ggb"

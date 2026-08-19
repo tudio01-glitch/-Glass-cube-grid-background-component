@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 export async function buildStandaloneHtml(
   preset: unknown,
   rootDir: string,
-  options: { sample?: boolean } = {},
+  options: { sample?: boolean; format?: 'page' | 'embed' } = {},
 ): Promise<string> {
   const result = await build({
     entryPoints: [resolve(rootDir, 'src/standalone/entry.tsx')],
@@ -40,6 +40,24 @@ export async function buildStandaloneHtml(
   // keep inline <script> payloads from terminating themselves
   js = js.replace(/<\/script/gi, '<\\/script');
   const presetJson = JSON.stringify(preset).replace(/</g, '\\u003c');
+  const sampleFlag = options.sample === true;
+
+  if (options.format === 'embed') {
+    // fragment for pasting into an existing page: host div + styles + bundle
+    return `<!-- glass-grid-bg — paste anywhere; the host div sizes the effect -->
+<div id="ggb-embed" style="position:relative;width:100%;height:100%;min-height:320px;overflow:hidden"></div>
+<style>
+.ggb.ggb-embed { position: absolute; inset: 0; }
+${css}
+</style>
+<script>
+window.__GGB_PRESET__ = ${presetJson};
+window.__GGB_SAMPLE__ = ${sampleFlag};
+window.__GGB_MOUNT__ = '#ggb-embed';
+</script>
+<script>${js}</script>
+`;
+  }
 
   return `<!doctype html>
 <html lang="he" dir="rtl">
@@ -106,7 +124,7 @@ export async function buildStandaloneHtml(
     <div id="root"></div>
     <script>
       window.__GGB_PRESET__ = ${presetJson};
-      window.__GGB_SAMPLE__ = ${options.sample === true};
+      window.__GGB_SAMPLE__ = ${sampleFlag};
     </script>
     <script>${js}</script>
   </body>
@@ -125,10 +143,18 @@ if (cliEntry) {
     const i = args.indexOf(flag);
     return i >= 0 ? args[i + 1] : undefined;
   };
+  const embed = args.includes('--embed');
   const presetPath = resolve(rootDir, valueOf('--preset') ?? 'presets/default.json');
-  const outPath = resolve(rootDir, valueOf('--out') ?? 'dist/glass-grid-bg.standalone.html');
+  const outPath = resolve(
+    rootDir,
+    valueOf('--out') ??
+      (embed ? 'dist/glass-grid-bg.embed.html' : 'dist/glass-grid-bg.standalone.html'),
+  );
   const preset: unknown = JSON.parse(readFileSync(presetPath, 'utf8'));
-  const html = await buildStandaloneHtml(preset, rootDir, { sample: args.includes('--sample') });
+  const html = await buildStandaloneHtml(preset, rootDir, {
+    sample: args.includes('--sample'),
+    format: embed ? 'embed' : 'page',
+  });
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, html);
   console.log(`written ${outPath} (${Math.round(html.length / 1024)} KB)`);

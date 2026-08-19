@@ -21,6 +21,27 @@ export type TiltSettings = {
   perspective: number; // px. default 900
 };
 
+/** The embossed bump at the center of every tile. */
+export type ReliefSettings = {
+  shape: 'round' | 'rect' | 'dome'; // circular / follows tile corners / amorphous dome
+  area: number; // 0-100, % of the tile the bump covers. default 78
+  height: number; // 0-100, how strongly the bump reads. default 55
+};
+
+/** Normalized height field sampled from a 3D file, row-major size x size. */
+export type Heightmap = { size: number; data: number[] };
+
+/**
+ * Global relief: one shape spanning the whole grid, so the tiles read as a
+ * single woven surface instead of independent units.
+ */
+export type WeaveSettings = {
+  mode: 'off' | 'dome' | 'file';
+  height: number; // 0-100 relief strength. default 50
+  heightmap: Heightmap | null; // used when mode === 'file'
+  fileName?: string;
+};
+
 export type GlassSettings = {
   frost: number; // 0-100 -> backdrop blur 0-24px. default 0
   refraction: number; // 0-100 -> edge distortion strength. default 100
@@ -60,6 +81,8 @@ export type GlassGridBgProps = {
   tiles?: TileSettingsInput;
   glass?: Partial<GlassSettings>;
   tilt?: Partial<TiltSettings>; // 3D tilt of the whole glass surface
+  relief?: Partial<ReliefSettings>; // per-tile bump
+  weave?: Partial<WeaveSettings>; // global relief across all tiles
   source?: MotionSource; // what moves behind the glass
   quality?: GlassQuality; // hq = SVG displacement filters (refraction/dispersion)
   className?: string;
@@ -71,6 +94,8 @@ export type GlassGridPreset = {
   tiles: TileSettings;
   glass: GlassSettings;
   tilt: TiltSettings;
+  relief: ReliefSettings;
+  weave: WeaveSettings;
   source: MotionSource;
   quality: GlassQuality;
 };
@@ -93,6 +118,18 @@ export const defaultTilt: TiltSettings = {
   x: 0,
   y: 0,
   perspective: 900,
+};
+
+export const defaultRelief: ReliefSettings = {
+  shape: 'round',
+  area: 78,
+  height: 55,
+};
+
+export const defaultWeave: WeaveSettings = {
+  mode: 'off',
+  height: 50,
+  heightmap: null,
 };
 
 /** Merges tile input over the defaults; legacy `gap` fills both axes. */
@@ -142,6 +179,8 @@ export const defaultPreset: GlassGridPreset = {
   tiles: defaultTiles,
   glass: defaultGlass,
   tilt: defaultTilt,
+  relief: defaultRelief,
+  weave: defaultWeave,
   source: defaultSource,
   quality: 'css',
 };
@@ -152,6 +191,8 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     tiles?: TileSettingsInput;
     glass?: Partial<GlassSettings>;
     tilt?: Partial<TiltSettings>;
+    relief?: Partial<ReliefSettings>;
+    weave?: Partial<WeaveSettings>;
     source?: MotionSource;
     quality?: GlassQuality;
   };
@@ -159,6 +200,8 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     tiles: normalizeTiles(p.tiles),
     glass: { ...defaultGlass, ...p.glass },
     tilt: { ...defaultTilt, ...p.tilt },
+    relief: { ...defaultRelief, ...p.relief },
+    weave: { ...defaultWeave, ...p.weave },
     source: p.source ?? defaultSource,
     quality: p.quality === 'hq' ? 'hq' : 'css',
   };
@@ -185,6 +228,8 @@ export function tokensToCssVars(
   glass: GlassSettings,
   tilt: TiltSettings,
   source: MotionSource,
+  relief: ReliefSettings = defaultRelief,
+  weave: WeaveSettings = defaultWeave,
 ): Record<string, string> {
   const colors =
     source.kind === 'shapes' && source.preset.colors.length > 0
@@ -205,6 +250,9 @@ export function tokensToCssVars(
     '--ggb-tilt-x': String(tilt.x),
     '--ggb-tilt-y': String(tilt.y),
     '--ggb-perspective': `${tilt.perspective}px`,
+    '--ggb-relief-area': String(relief.area),
+    '--ggb-relief-height': String(relief.height),
+    '--ggb-weave-height': String(weave.height),
     '--ggb-light-angle': String(glass.lightAngle),
     '--ggb-light-intensity': String(glass.lightIntensity),
     '--ggb-opacity': String(glass.opacity),
@@ -222,6 +270,8 @@ export function tokensToStyle(
   glass: GlassSettings,
   tilt: TiltSettings,
   source: MotionSource,
+  relief: ReliefSettings = defaultRelief,
+  weave: WeaveSettings = defaultWeave,
 ): CSSProperties {
-  return tokensToCssVars(tiles, glass, tilt, source) as CSSProperties;
+  return tokensToCssVars(tiles, glass, tilt, source, relief, weave) as CSSProperties;
 }

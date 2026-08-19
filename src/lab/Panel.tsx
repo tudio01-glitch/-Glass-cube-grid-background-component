@@ -12,10 +12,13 @@ import type {
   GlassGridPreset,
   GlassSettings,
   MotionSource,
+  ReliefSettings,
   ShapesPreset,
   TileSettings,
   TiltSettings,
+  WeaveSettings,
 } from '../component/glass/tokens';
+import { parse3dFileToHeightmap } from './parse3d';
 import {
   CheckboxField,
   ColorField,
@@ -25,7 +28,14 @@ import {
   Slider,
   TextField,
 } from './controls';
-import { copyText, downloadStandaloneHtml, formatCssTokens, formatPresetJson } from './exporters';
+import {
+  copyEmbedCode,
+  copyText,
+  downloadStandaloneHtml,
+  formatCssTokens,
+  formatPresetJson,
+  savePresetToRepo,
+} from './exporters';
 
 export type SourceTab = 'shapes' | 'upload' | 'draw';
 
@@ -116,6 +126,10 @@ export function Panel(props: PanelProps) {
         />
       </Group>
 
+      <Group title="הבלטה">
+        <ReliefControls {...props} />
+      </Group>
+
       <Group title="משטח">
         <Slider label="הטיה אנכית" min={-45} max={45} value={tilt.x} unit="°" onChange={(v) => patchTilt({ x: v })} />
         <Slider label="הטיה אופקית" min={-45} max={45} value={tilt.y} unit="°" onChange={(v) => patchTilt({ y: v })} />
@@ -164,6 +178,14 @@ function loadStoredPresets(): Record<string, GlassGridPreset> {
 function PresetsControls({ preset, onChange }: PanelProps) {
   const [name, setName] = useState('');
   const [stored, setStored] = useState<Record<string, GlassGridPreset>>(loadStoredPresets);
+  const [repoStatus, setRepoStatus] = useState<string | null>(null);
+  const repoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flashRepo = (message: string) => {
+    setRepoStatus(message);
+    if (repoTimer.current) clearTimeout(repoTimer.current);
+    repoTimer.current = setTimeout(() => setRepoStatus(null), 3500);
+  };
 
   const persist = (next: Record<string, GlassGridPreset>) => {
     setStored(next);
@@ -191,6 +213,25 @@ function PresetsControls({ preset, onChange }: PanelProps) {
 
   return (
     <>
+      <div className="lab-actions">
+        <button
+          type="button"
+          className="lab-button lab-button-primary"
+          onClick={() =>
+            savePresetToRepo(preset).then(
+              () => flashRepo('הנראות נשמרה בריפו — presets/default.json'),
+              () => flashRepo('השמירה לריפו זמינה בסביבת הפיתוח (npm run dev)'),
+            )
+          }
+        >
+          לשמור את הנראות בריפו
+        </button>
+      </div>
+      {repoStatus && (
+        <p className="lab-note" role="status">
+          {repoStatus}
+        </p>
+      )}
       <TextField label="שם" value={name} dir="rtl" placeholder="שם לפריסט חדש" onChange={setName} />
       <div className="lab-actions">
         <button type="button" className="lab-button" disabled={!name.trim()} onClick={save}>
@@ -284,11 +325,114 @@ function ExportControls({ preset, showSample }: { preset: GlassGridPreset; showS
         >
           להוריד HTML עצמאי
         </button>
+        <button
+          type="button"
+          className="lab-button lab-button-primary"
+          onClick={() =>
+            run(
+              copyEmbedCode(preset, showSample),
+              'הקוד המלא הועתק — אפשר להדביק בכל עמוד',
+              'ההעתקה זמינה בסביבת הפיתוח — אפשר גם npm run export -- --embed',
+            )
+          }
+        >
+          להעתיק קוד מלא לשיבוץ
+        </button>
       </div>
       {status && (
         <p className="lab-note" role="status">
           {status}
         </p>
+      )}
+    </>
+  );
+}
+
+/* ---- relief (per-tile bump) + weave (global relief) ---- */
+
+function ReliefControls({ preset, onChange }: PanelProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const { relief, weave } = preset;
+
+  const patchRelief = (patch: Partial<ReliefSettings>) =>
+    onChange({ ...preset, relief: { ...relief, ...patch } });
+  const patchWeave = (patch: Partial<WeaveSettings>) =>
+    onChange({ ...preset, weave: { ...weave, ...patch } });
+
+  const loadModel = async (file: File) => {
+    setFileError(null);
+    try {
+      const heightmap = await parse3dFileToHeightmap(file);
+      patchWeave({ mode: 'file', heightmap, fileName: file.name });
+    } catch {
+      setFileError('הקובץ לא נקרא כמודל תלת־ממד — נתמכים ‎.obj ו‑‎.stl');
+    }
+  };
+
+  return (
+    <>
+      <SelectField
+        label="סוג"
+        value={relief.shape}
+        options={[
+          { value: 'round', label: 'עגולה' },
+          { value: 'rect', label: 'מלבנית' },
+          { value: 'dome', label: 'כיפה אמורפית' },
+        ]}
+        onChange={(v) => patchRelief({ shape: v })}
+      />
+      <Slider label="שטח" min={10} max={100} value={relief.area} unit="%" onChange={(v) => patchRelief({ area: v })} />
+      <Slider label="גובה" min={0} max={100} value={relief.height} onChange={(v) => patchRelief({ height: v })} />
+
+      <h4 className="lab-subtitle">מארג משותף — הבלטה אחת על כל הרשת</h4>
+      <SelectField
+        label="מצב"
+        value={weave.mode}
+        options={[
+          { value: 'off', label: 'כבוי' },
+          { value: 'dome', label: 'כיפה גלובלית' },
+          { value: 'file', label: 'מקובץ תלת־ממד' },
+        ]}
+        onChange={(v) => patchWeave({ mode: v })}
+      />
+      {weave.mode !== 'off' && (
+        <Slider label="גובה מארג" min={0} max={100} value={weave.height} onChange={(v) => patchWeave({ height: v })} />
+      )}
+      {weave.mode === 'file' && (
+        <>
+          <div className="lab-actions">
+            <button type="button" className="lab-button" onClick={() => fileRef.current?.click()}>
+              לטעון קובץ ‎.obj / ‎.stl
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".obj,.stl"
+            hidden
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void loadModel(file);
+              e.target.value = '';
+            }}
+          />
+          {fileError && (
+            <p className="lab-note lab-note-warning" role="alert">
+              {fileError}
+            </p>
+          )}
+          {weave.heightmap && weave.fileName && (
+            <p className="lab-note" role="status">
+              נטען: {weave.fileName} — הצורה פרוסה על כל הרשת
+            </p>
+          )}
+          {!weave.heightmap && !fileError && (
+            <p className="lab-note" role="note">
+              אחרי הטעינה הצורה תתפרש על כל האריחים כמשטח אחד
+            </p>
+          )}
+        </>
       )}
     </>
   );
