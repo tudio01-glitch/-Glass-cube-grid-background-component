@@ -70,7 +70,7 @@ body {
   outline: 1px solid #2b3157;
 }
 
-.lab-preview-ggb {
+.ggb.lab-preview-ggb {
   position: absolute;
   inset: 0;
 }

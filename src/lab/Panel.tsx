@@ -18,6 +18,7 @@ import {
   Slider,
   TextField,
 } from './controls';
+import { copyText, downloadStandaloneHtml, formatCssTokens, formatPresetJson } from './exporters';
 
 export type SourceTab = 'shapes' | 'upload' | 'draw';
 
@@ -107,7 +108,74 @@ export function Panel(props: PanelProps) {
       <Group title="רקע">
         <BackgroundTabs {...props} />
       </Group>
+
+      <Group title="ייצוא">
+        <ExportControls preset={preset} />
+      </Group>
     </aside>
+  );
+}
+
+/* ---- export ---- */
+
+function ExportControls({ preset }: { preset: GlassGridPreset }) {
+  const [status, setStatus] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flash = (message: string) => {
+    setStatus(message);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setStatus(null), 3500);
+  };
+
+  const run = (task: Promise<void>, done: string, fallback: string) => {
+    task.then(
+      () => flash(done),
+      () => flash(fallback),
+    );
+  };
+
+  return (
+    <>
+      <div className="lab-actions">
+        <button
+          type="button"
+          className="lab-button"
+          onClick={() =>
+            run(copyText(formatCssTokens(preset)), 'טוקני ה‑CSS הועתקו', 'ההעתקה זמינה בדפדפן עם הרשאת לוח')
+          }
+        >
+          העתקת טוקני CSS
+        </button>
+        <button
+          type="button"
+          className="lab-button"
+          onClick={() =>
+            run(copyText(formatPresetJson(preset)), 'ה‑JSON הועתק', 'ההעתקה זמינה בדפדפן עם הרשאת לוח')
+          }
+        >
+          העתקת JSON
+        </button>
+        <button
+          type="button"
+          className="lab-button lab-button-primary"
+          onClick={() =>
+            run(
+              downloadStandaloneHtml(preset),
+              'קובץ ה‑HTML בדרך אליך',
+              'ההורדה זמינה בסביבת הפיתוח — אפשר גם npm run export',
+            )
+          }
+        >
+          הורדת HTML עצמאי
+        </button>
+      </div>
+      {status && (
+        <p className="lab-note" role="status">
+          {status}
+        </p>
+      )}
+    </>
   );
 }
 
