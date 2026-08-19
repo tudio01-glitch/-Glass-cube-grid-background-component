@@ -60,8 +60,101 @@ const renderSine: Renderer = (ctx, w, h, pad, p, t) => {
   }
 };
 
-const renderers: Partial<Record<ShapesPreset['shape'], Renderer>> = {
+function softDisc(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  color: string,
+  coreStop = 0.55,
+) {
+  if (r <= 0) return;
+  const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+  grad.addColorStop(0, color);
+  grad.addColorStop(coreStop, color);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Single disc that drifts around the origin and pulses. */
+const renderCircle: Renderer = (ctx, w, h, pad, p, t) => {
+  fillBackground(ctx, w, h, p);
+  const colors = palette(p);
+  const min = Math.min(w, h);
+  const o = originPx(p, w, h, pad);
+  const base = (p.size / 100) * min * 0.5;
+  const ang = (t * Math.PI * 2) / BASE_CYCLE_S;
+  const x = o.x + Math.cos(ang) * min * 0.18;
+  const y = o.y + Math.sin(ang * 1.37) * min * 0.14;
+  const r = base * (0.82 + 0.18 * Math.sin(t * 1.4));
+  softDisc(ctx, x, y, r, colors[0]);
+};
+
+/** Expanding rings emitted from the origin; `count` rings alive at once. */
+const renderRipple: Renderer = (ctx, w, h, pad, p, t) => {
+  fillBackground(ctx, w, h, p);
+  const colors = palette(p);
+  const min = Math.min(w, h);
+  const o = originPx(p, w, h, pad);
+  const maxR = Math.hypot(Math.max(o.x, w - o.x), Math.max(o.y, h - o.y));
+  const n = Math.max(1, Math.round(p.count));
+  for (let k = 0; k < n; k++) {
+    const prog = ((t / BASE_CYCLE_S + k / n) % 1 + 1) % 1;
+    const r = prog * maxR;
+    if (r <= 0) continue;
+    ctx.globalAlpha = 1 - prog;
+    ctx.lineWidth = Math.max(2, (p.size / 100) * min * 0.14 * (0.4 + 0.6 * (1 - prog)));
+    ctx.strokeStyle = colors[k % colors.length];
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+};
+
+/** Soft radial-gradient blobs drifting on lissajous paths around the origin. */
+const renderBlob: Renderer = (ctx, w, h, pad, p, t) => {
+  fillBackground(ctx, w, h, p);
+  const colors = palette(p);
+  const min = Math.min(w, h);
+  const o = originPx(p, w, h, pad);
+  const n = Math.max(1, Math.round(p.count));
+  for (let k = 0; k < n; k++) {
+    const phase = k * 2.399; // golden angle keeps blobs spread out
+    const x = o.x + Math.sin(t * 0.37 + phase) * w * 0.28;
+    const y = o.y + Math.cos(t * 0.29 + phase * 1.7) * h * 0.28;
+    const r = (p.size / 100) * min * (0.5 + 0.18 * Math.sin(t * 0.5 + phase * 2));
+    softDisc(ctx, x, y, r, colors[k % colors.length], 0.25);
+  }
+};
+
+/** Discs circling the origin at slightly different rates. */
+const renderOrbit: Renderer = (ctx, w, h, pad, p, t) => {
+  fillBackground(ctx, w, h, p);
+  const colors = palette(p);
+  const min = Math.min(w, h);
+  const o = originPx(p, w, h, pad);
+  const n = Math.max(1, Math.round(p.count));
+  const orbitR = (p.size / 100) * min * 0.5;
+  const discR = Math.max(6, orbitR * 0.22);
+  for (let k = 0; k < n; k++) {
+    const ang = (t * Math.PI * 2) / BASE_CYCLE_S + (k * Math.PI * 2) / n;
+    const wobble = orbitR * (1 + 0.08 * Math.sin(t * 0.9 + k));
+    const x = o.x + Math.cos(ang * (1 + k * 0.05)) * wobble;
+    const y = o.y + Math.sin(ang * (1 + k * 0.05)) * wobble;
+    softDisc(ctx, x, y, discR, colors[k % colors.length]);
+  }
+};
+
+const renderers: Record<ShapesPreset['shape'], Renderer> = {
+  circle: renderCircle,
+  ripple: renderRipple,
   sine: renderSine,
+  blob: renderBlob,
+  orbit: renderOrbit,
 };
 
 function renderShapes(
@@ -72,8 +165,7 @@ function renderShapes(
   p: ShapesPreset,
   t: number,
 ) {
-  const renderer = renderers[p.shape] ?? renderSine;
-  renderer(ctx, w, h, pad, p, t);
+  (renderers[p.shape] ?? renderSine)(ctx, w, h, pad, p, t);
 }
 
 /** Built-in animated shapes on a rAF-driven canvas. */

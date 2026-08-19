@@ -10,9 +10,30 @@ const bezeqDefault = defaultPresetJson as unknown as GlassGridPreset;
 
 export default function LabPage() {
   const [preset, setPreset] = useState<GlassGridPreset>(bezeqDefault);
+  const [originPicking, setOriginPicking] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const [previewBox, setPreviewBox] = useState({ w: 484, h: 484 });
   const reduced = useReducedMotion();
+
+  const pickOrigin = (clientX: number, clientY: number) => {
+    const el = previewRef.current;
+    if (el && preset.source.kind === 'shapes') {
+      const rect = el.getBoundingClientRect();
+      const x = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      const y = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+      setPreset({
+        ...preset,
+        source: {
+          kind: 'shapes',
+          preset: {
+            ...preset.source.preset,
+            origin: { x: +x.toFixed(3), y: +y.toFixed(3) },
+          },
+        },
+      });
+    }
+    setOriginPicking(false);
+  };
 
   useEffect(() => {
     const el = previewRef.current;
@@ -29,7 +50,12 @@ export default function LabPage() {
 
   return (
     <div className="lab">
-      <Panel preset={preset} onChange={setPreset} />
+      <Panel
+        preset={preset}
+        onChange={setPreset}
+        originPicking={originPicking}
+        onOriginPickingChange={setOriginPicking}
+      />
       <main className="lab-stage">
         <header className="lab-stage-header">
           <h1 className="lab-title">glass-grid-bg / מעבדה</h1>
@@ -64,6 +90,22 @@ export default function LabPage() {
               </button>
             </div>
           </GlassGridBg>
+          {originPicking && (
+            <button
+              type="button"
+              className="lab-origin-overlay"
+              aria-label="קביעת נקודת המוצא בלחיצה"
+              onClick={(e) => {
+                if (e.detail === 0) {
+                  // keyboard activation: no pointer position — take the center
+                  const r = e.currentTarget.getBoundingClientRect();
+                  pickOrigin(r.left + r.width / 2, r.top + r.height / 2);
+                } else {
+                  pickOrigin(e.clientX, e.clientY);
+                }
+              }}
+            />
+          )}
         </div>
       </main>
     </div>

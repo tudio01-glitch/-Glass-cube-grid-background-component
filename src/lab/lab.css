@@ -329,3 +329,28 @@ body {
   border-color: #8fb4ff;
   color: #e8ecff;
 }
+
+/* origin picking overlay */
+.lab-origin-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: transparent;
+  border: 0;
+  cursor: crosshair;
+}
+
+/* shapes color swatches row */
+.lab-swatches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+}
+
+.lab-swatches .lab-field {
+  grid-template-columns: 48px auto 1fr;
+}
+
+.lab-swatches .lab-field-value {
+  font-size: 11px;
+}

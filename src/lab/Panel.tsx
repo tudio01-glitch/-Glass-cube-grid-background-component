@@ -1,14 +1,18 @@
 import type { ReactNode } from 'react';
+import { BEZEQ_COLORS } from '../component/glass/tokens';
 import type {
   GlassGridPreset,
   GlassSettings,
+  ShapesPreset,
   TileSettings,
 } from '../component/glass/tokens';
-import { Dial, Segmented, SelectField, Slider, TextField } from './controls';
+import { ColorField, Dial, Segmented, SelectField, Slider, TextField } from './controls';
 
 export type PanelProps = {
   preset: GlassGridPreset;
   onChange: (next: GlassGridPreset) => void;
+  originPicking: boolean;
+  onOriginPickingChange: (picking: boolean) => void;
 };
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
@@ -21,7 +25,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** Settings panel — Hebrew RTL. Groups: tiles, glass, background, export, presets. */
-export function Panel({ preset, onChange }: PanelProps) {
+export function Panel({ preset, onChange, originPicking, onOriginPickingChange }: PanelProps) {
   const patchTiles = (patch: Partial<TileSettings>) =>
     onChange({ ...preset, tiles: { ...preset.tiles, ...patch } });
   const patchGlass = (patch: Partial<GlassSettings>) =>
@@ -69,6 +73,83 @@ export function Panel({ preset, onChange }: PanelProps) {
           onChange={(v) => onChange({ ...preset, quality: v })}
         />
       </Group>
+
+      <Group title="רקע">
+        <ShapesControls
+          preset={preset}
+          onChange={onChange}
+          originPicking={originPicking}
+          onOriginPickingChange={onOriginPickingChange}
+        />
+      </Group>
     </aside>
+  );
+}
+
+function ShapesControls({ preset, onChange, originPicking, onOriginPickingChange }: PanelProps) {
+  const source = preset.source;
+  if (source.kind !== 'shapes') return null;
+  const shapes = source.preset;
+  const patchShapes = (patch: Partial<ShapesPreset>) =>
+    onChange({ ...preset, source: { kind: 'shapes', preset: { ...shapes, ...patch } } });
+
+  const colors4 = [0, 1, 2, 3].map((i) => shapes.colors[i] ?? BEZEQ_COLORS[i]);
+  const setColor = (i: number, v: string) => {
+    const next = [...colors4];
+    next[i] = v;
+    patchShapes({ colors: next });
+  };
+
+  return (
+    <>
+      <SelectField
+        label="צורה"
+        value={shapes.shape}
+        options={[
+          { value: 'circle', label: 'עיגול' },
+          { value: 'ripple', label: 'אדוות' },
+          { value: 'sine', label: 'גל סינוס' },
+          { value: 'blob', label: 'כתמים' },
+          { value: 'orbit', label: 'מסלול' },
+        ]}
+        onChange={(v) => patchShapes({ shape: v })}
+      />
+      <div className="lab-swatches">
+        {colors4.map((c, i) => (
+          <ColorField key={i} label={`צבע ${i + 1}`} value={c} onChange={(v) => setColor(i, v)} />
+        ))}
+      </div>
+      <Slider label="גודל" min={5} max={100} value={shapes.size} unit="%" onChange={(v) => patchShapes({ size: v })} />
+      <Slider label="כמות" min={1} max={12} value={shapes.count} onChange={(v) => patchShapes({ count: v })} />
+      <Slider label="מהירות" min={0.1} max={3} step={0.1} value={shapes.speed} onChange={(v) => patchShapes({ speed: v })} />
+      <Slider label="טשטוש" min={0} max={60} value={shapes.blur} unit="px" onChange={(v) => patchShapes({ blur: v })} />
+      <Slider
+        label="מוצא X"
+        min={0}
+        max={100}
+        value={Math.round(shapes.origin.x * 100)}
+        unit="%"
+        onChange={(v) => patchShapes({ origin: { ...shapes.origin, x: v / 100 } })}
+      />
+      <Slider
+        label="מוצא Y"
+        min={0}
+        max={100}
+        value={Math.round(shapes.origin.y * 100)}
+        unit="%"
+        onChange={(v) => patchShapes({ origin: { ...shapes.origin, y: v / 100 } })}
+      />
+      <div className="lab-field">
+        <span className="lab-field-label">מוצא</span>
+        <button
+          type="button"
+          className="lab-button"
+          aria-pressed={originPicking}
+          onClick={() => onOriginPickingChange(!originPicking)}
+        >
+          {originPicking ? 'לחיצה על התצוגה תקבע' : 'לקבוע בלחיצה על התצוגה'}
+        </button>
+      </div>
+    </>
   );
 }
