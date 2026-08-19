@@ -354,3 +354,17 @@ body {
 .lab-swatches .lab-field-value {
   font-size: 11px;
 }
+
+.lab-dropzone-hint {
+  margin-block-start: 6px;
+  font-size: 11px;
+  color: #6f76a3;
+  direction: ltr;
+}
+
+.lab-field-checkbox input[type='checkbox'] {
+  justify-self: start;
+  inline-size: 16px;
+  block-size: 16px;
+  accent-color: #f74a84;
+}

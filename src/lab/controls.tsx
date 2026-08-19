@@ -123,6 +123,34 @@ export function ColorField({
   );
 }
 
+export function CheckboxField({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="lab-field lab-field-checkbox">
+      <label className="lab-field-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <output className="lab-field-value" htmlFor={id}>
+        {checked ? 'כן' : 'לא'}
+      </output>
+    </div>
+  );
+}
+
 export function Segmented<T extends string>({
   label,
   value,

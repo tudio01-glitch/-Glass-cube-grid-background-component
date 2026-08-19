@@ -1,12 +1,22 @@
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BEZEQ_COLORS } from '../component/glass/tokens';
+import { BEZEQ_COLORS, defaultSource } from '../component/glass/tokens';
 import type {
   GlassGridPreset,
   GlassSettings,
+  MotionSource,
   ShapesPreset,
   TileSettings,
 } from '../component/glass/tokens';
-import { ColorField, Dial, Segmented, SelectField, Slider, TextField } from './controls';
+import {
+  CheckboxField,
+  ColorField,
+  Dial,
+  Segmented,
+  SelectField,
+  Slider,
+  TextField,
+} from './controls';
 
 export type PanelProps = {
   preset: GlassGridPreset;
@@ -25,7 +35,8 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** Settings panel — Hebrew RTL. Groups: tiles, glass, background, export, presets. */
-export function Panel({ preset, onChange, originPicking, onOriginPickingChange }: PanelProps) {
+export function Panel(props: PanelProps) {
+  const { preset, onChange } = props;
   const patchTiles = (patch: Partial<TileSettings>) =>
     onChange({ ...preset, tiles: { ...preset.tiles, ...patch } });
   const patchGlass = (patch: Partial<GlassSettings>) =>
@@ -75,16 +86,82 @@ export function Panel({ preset, onChange, originPicking, onOriginPickingChange }
       </Group>
 
       <Group title="רקע">
-        <ShapesControls
-          preset={preset}
-          onChange={onChange}
-          originPicking={originPicking}
-          onOriginPickingChange={onOriginPickingChange}
-        />
+        <BackgroundTabs {...props} />
       </Group>
     </aside>
   );
 }
+
+/* ---- background source tabs ---- */
+
+type SourceTab = 'shapes' | 'upload' | 'draw';
+
+function categoryOf(source: MotionSource): SourceTab {
+  if (source.kind === 'shapes') return 'shapes';
+  if (source.kind === 'draw') return 'draw';
+  return 'upload';
+}
+
+const TAB_LABELS: Record<SourceTab, string> = {
+  shapes: 'צורות',
+  upload: 'העלאה',
+  draw: 'ציור',
+};
+
+function BackgroundTabs(props: PanelProps) {
+  const { preset, onChange } = props;
+  const source = preset.source;
+  const [tab, setTab] = useState<SourceTab>(() => categoryOf(source));
+  const cache = useRef<Partial<Record<SourceTab, MotionSource>>>({});
+  const prevCat = useRef(categoryOf(source));
+
+  useEffect(() => {
+    const cat = categoryOf(source);
+    cache.current[cat] = source;
+    // follow external source replacement (e.g. loading a preset)
+    if (prevCat.current !== cat) {
+      prevCat.current = cat;
+      setTab(cat);
+    }
+  }, [source]);
+
+  const switchTab = (t: SourceTab) => {
+    setTab(t);
+    if (t === categoryOf(source)) return;
+    const cached = cache.current[t];
+    if (cached) onChange({ ...preset, source: cached });
+    else if (t === 'shapes') onChange({ ...preset, source: defaultSource });
+    // upload/draw with nothing yet: current source keeps playing until content arrives
+  };
+
+  const tabs: SourceTab[] = ['shapes', 'upload'];
+
+  return (
+    <>
+      <div className="lab-tabs" role="tablist" aria-label="מקור הרקע">
+        {tabs.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            id={`lab-tab-${t}`}
+            aria-selected={tab === t}
+            aria-controls={`lab-tabpanel-${t}`}
+            onClick={() => switchTab(t)}
+          >
+            {TAB_LABELS[t]}
+          </button>
+        ))}
+      </div>
+      <div role="tabpanel" id={`lab-tabpanel-${tab}`} aria-labelledby={`lab-tab-${tab}`}>
+        {tab === 'shapes' && <ShapesControls {...props} />}
+        {tab === 'upload' && <UploadControls {...props} />}
+      </div>
+    </>
+  );
+}
+
+/* ---- shapes tab ---- */
 
 function ShapesControls({ preset, onChange, originPicking, onOriginPickingChange }: PanelProps) {
   const source = preset.source;
@@ -150,6 +227,142 @@ function ShapesControls({ preset, onChange, originPicking, onOriginPickingChange
           {originPicking ? 'לחיצה על התצוגה תקבע' : 'לקבוע בלחיצה על התצוגה'}
         </button>
       </div>
+    </>
+  );
+}
+
+/* ---- upload tab ---- */
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function detectedLabel(source: MotionSource): string | null {
+  if (source.kind === 'lottie') return 'Lottie';
+  if (source.kind !== 'media') return null;
+  return { gif: 'GIF', svg: 'SVG מונפש', video: 'וידאו' }[source.type];
+}
+
+function UploadControls({ preset, onChange }: PanelProps) {
+  const source = preset.source;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const applyFile = async (file: File) => {
+    setError(null);
+    const ext = file.name.toLowerCase().split('.').pop() ?? '';
+    try {
+      if (ext === 'json') {
+        const json: unknown = JSON.parse(await file.text());
+        if (typeof json !== 'object' || json === null || !('layers' in json)) {
+          setError('הקובץ נראה כ‑JSON אבל לא כאנימציית Lottie');
+          return;
+        }
+        onChange({ ...preset, source: { kind: 'lottie', data: json, speed: 1, loop: true } });
+      } else if (ext === 'mp4' || ext === 'webm') {
+        const src = await readAsDataUrl(file);
+        onChange({ ...preset, source: { kind: 'media', src, type: 'video', speed: 1 } });
+      } else if (ext === 'gif' || ext === 'svg') {
+        const src = await readAsDataUrl(file);
+        onChange({ ...preset, source: { kind: 'media', src, type: ext, speed: 1 } });
+      } else {
+        setError('אפשר להעלות קבצים מסוג gif / svg / mp4 / webm / json');
+        return;
+      }
+      setFileName(file.name);
+    } catch {
+      setError('קריאת הקובץ נעצרה — כדאי לנסות שוב');
+    }
+  };
+
+  const patchSpeed = (speed: number) => {
+    if (source.kind === 'media' || source.kind === 'lottie') {
+      onChange({ ...preset, source: { ...source, speed } });
+    }
+  };
+
+  const label = detectedLabel(source);
+
+  return (
+    <>
+      <div
+        className={`lab-dropzone${dragOver ? ' is-over' : ''}`}
+        role="button"
+        tabIndex={0}
+        aria-label="העלאת קובץ תנועה"
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) void applyFile(file);
+        }}
+      >
+        לגרור קובץ לכאן או ללחוץ לבחירה
+        <div className="lab-dropzone-hint">gif · svg · mp4 · webm · json (Lottie)</div>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".gif,.svg,.mp4,.webm,.json"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void applyFile(file);
+          e.target.value = '';
+        }}
+      />
+      {error && (
+        <p className="lab-note lab-note-warning" role="alert">
+          {error}
+        </p>
+      )}
+      {label && (
+        <p className="lab-note" role="status">
+          סוג שזוהה: {label}
+          {fileName ? ` · ${fileName}` : ''}
+        </p>
+      )}
+      {(source.kind === 'lottie' || (source.kind === 'media' && source.type === 'video')) && (
+        <Slider
+          label="מהירות"
+          min={0.1}
+          max={3}
+          step={0.1}
+          value={source.speed ?? 1}
+          onChange={patchSpeed}
+        />
+      )}
+      {source.kind === 'lottie' && (
+        <CheckboxField
+          label="לולאה"
+          checked={source.loop ?? true}
+          onChange={(loop) => onChange({ ...preset, source: { ...source, loop } })}
+        />
+      )}
+      {source.kind === 'media' && (source.type === 'gif' || source.type === 'svg') && (
+        <p className="lab-note" role="note">
+          מהירות ולולאה נקבעות בתוך הקובץ עצמו
+        </p>
+      )}
     </>
   );
 }
