@@ -20,6 +20,7 @@ import type {
   WeaveSettings,
 } from '../component/glass/tokens';
 import { parse3dFileToHeightmap } from './parse3d';
+import { gradientGallery } from './gradientGallery';
 import {
   CheckboxField,
   ColorField,
@@ -38,7 +39,7 @@ import {
   savePresetToRepo,
 } from './exporters';
 
-export type SourceTab = 'shapes' | 'upload' | 'draw';
+export type SourceTab = 'shapes' | 'gallery' | 'upload' | 'draw';
 
 export function categoryOf(source: MotionSource): SourceTab {
   if (source.kind === 'shapes') return 'shapes';
@@ -476,6 +477,7 @@ function ReliefControls({ preset, onChange }: PanelProps) {
 
 const TAB_LABELS: Record<SourceTab, string> = {
   shapes: 'צורות',
+  gallery: 'גלריה',
   upload: 'העלאה',
   draw: 'ציור',
 };
@@ -489,15 +491,17 @@ function BackgroundTabs(props: PanelProps) {
   useEffect(() => {
     const cat = categoryOf(source);
     cache.current[cat] = source;
-    // follow external source replacement (e.g. loading a preset)
+    // follow external source replacement (e.g. loading a preset) — but stay
+    // in the gallery while browsing it (its picks are shapes sources too)
     if (prevCat.current !== cat) {
       prevCat.current = cat;
-      onTabChange(cat);
+      if (!(cat === 'shapes' && tab === 'gallery')) onTabChange(cat);
     }
-  }, [source, onTabChange]);
+  }, [source, onTabChange, tab]);
 
   const switchTab = (t: SourceTab) => {
     onTabChange(t);
+    if (t === 'gallery') return; // browse-only: source changes on card click
     if (t === categoryOf(source)) return;
     const cached = cache.current[t];
     if (cached) onChange({ ...preset, source: cached });
@@ -506,7 +510,7 @@ function BackgroundTabs(props: PanelProps) {
     // upload with nothing yet: current source keeps playing until a file arrives
   };
 
-  const tabs: SourceTab[] = ['shapes', 'upload', 'draw'];
+  const tabs: SourceTab[] = ['shapes', 'gallery', 'upload', 'draw'];
 
   return (
     <>
@@ -527,6 +531,7 @@ function BackgroundTabs(props: PanelProps) {
       </div>
       <div role="tabpanel" id={`lab-tabpanel-${tab}`} aria-labelledby={`lab-tab-${tab}`}>
         {tab === 'shapes' && <ShapesControls {...props} />}
+        {tab === 'gallery' && <GalleryControls {...props} />}
         {tab === 'upload' && <UploadControls {...props} />}
         {tab === 'draw' && <DrawControls {...props} />}
       </div>
@@ -636,12 +641,30 @@ function ShapesControls({ preset, onChange, originPicking, onOriginPickingChange
       <SelectField
         label="צורה"
         value={shapes.shape}
-        options={[
-          { value: 'circle', label: 'עיגול' },
-          { value: 'ripple', label: 'אדוות' },
-          { value: 'sine', label: 'גל סינוס' },
-          { value: 'blob', label: 'כתמים' },
-          { value: 'orbit', label: 'מסלול' },
+        groups={[
+          {
+            label: 'צורות',
+            options: [
+              { value: 'circle', label: 'עיגול' },
+              { value: 'ripple', label: 'אדוות' },
+              { value: 'sine', label: 'גל סינוס' },
+              { value: 'blob', label: 'כתמים' },
+              { value: 'orbit', label: 'מסלול' },
+            ],
+          },
+          {
+            label: 'גרדיאנטים בתנועה',
+            options: [
+              { value: 'grad-sweep', label: 'מפל צבע מסתובב' },
+              { value: 'grad-conic', label: 'מערבולת קונית' },
+              { value: 'grad-mesh', label: 'Mesh נוזלי' },
+              { value: 'grad-aurora', label: 'זוהר צפוני' },
+              { value: 'grad-pulse', label: 'פעימה רדיאלית' },
+              { value: 'grad-waves', label: 'גלי צבע רכים' },
+              { value: 'grad-stripes', label: 'פסים אלכסוניים' },
+              { value: 'grad-silk', label: 'משי מתנועע' },
+            ],
+          },
         ]}
         onChange={(v) => patchShapes({ shape: v })}
       />
@@ -680,6 +703,40 @@ function ShapesControls({ preset, onChange, originPicking, onOriginPickingChange
         >
           {originPicking ? 'לחיצה על התצוגה תקבע' : 'לקבוע בלחיצה על התצוגה'}
         </button>
+      </div>
+    </>
+  );
+}
+
+/* ---- gallery tab: curated animated-gradient backgrounds ---- */
+
+function GalleryControls({ preset, onChange }: PanelProps) {
+  const current =
+    preset.source.kind === 'shapes' ? JSON.stringify(preset.source.preset) : null;
+  return (
+    <>
+      <p className="lab-note" role="note">
+        קולקציית רקעי גרדיאנט בתנועה — לחיצה מחליפה את הרקע ואפשר להמשיך לכוון בטאב
+        «צורות»
+      </p>
+      <div className="lab-gallery">
+        {gradientGallery.map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            className="lab-gallery-card"
+            aria-pressed={current === JSON.stringify(g.preset)}
+            style={{ background: g.css }}
+            onClick={() =>
+              onChange({
+                ...preset,
+                source: { kind: 'shapes', preset: structuredClone(g.preset) },
+              })
+            }
+          >
+            <span className="lab-gallery-name">{g.name}</span>
+          </button>
+        ))}
       </div>
     </>
   );

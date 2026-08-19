@@ -61,7 +61,7 @@ size scales up automatically and the wrapper gets `data-ggb-capped`).
 
 | kind     | payload                                                | notes                                  |
 | -------- | ------------------------------------------------------ | -------------------------------------- |
-| `shapes` | `preset: { shape, colors, size, count, speed, blur, origin }` | built-in canvas shapes: `circle`, `ripple`, `sine`, `blob`, `orbit` |
+| `shapes` | `preset: { shape, colors, size, count, speed, blur, origin }` | canvas shapes: `circle`, `ripple`, `sine`, `blob`, `orbit` — plus the animated gradient family: `grad-sweep`, `grad-conic`, `grad-mesh`, `grad-aurora`, `grad-pulse`, `grad-waves`, `grad-stripes`, `grad-silk` |
 | `media`  | `src, type: 'gif' \| 'video' \| 'svg', speed?`          | `<img>` for gif/svg, muted looping `<video>` for mp4/webm |
 | `lottie` | `data: object \| string, speed?, loop?`                 | lottie-web, canvas renderer, lazy-loaded |
 | `draw`   | `path: Point[], stroke, color, motion`                  | motion: `path` / `pulse` / `drift`     |
@@ -144,8 +144,14 @@ depth 100, dispersion 100, frost 0, splay 100, light −45° / 80%, `sine` warp 
 Hebrew RTL panel over a resizable preview. The preview is a pure background by default —
 sample texts/buttons only appear when the «להציג תוכן לדוגמה» toggle is on. Groups: tiles
 (with separate horizontal/vertical brick gaps), glass (including the light-angle dial and
-the CSS/HQ toggle), surface tilt, background (tabs: shapes / upload / draw), export,
-presets (localStorage + Bezeq-default reset). Shapes origin can be set by
+the CSS/HQ toggle), surface tilt + pointer tilt, background (tabs: shapes / gallery /
+upload / draw), export, presets (localStorage + Bezeq-default reset).
+
+The **gallery tab** holds a curated collection of animated gradient backgrounds
+(15 ready-made cards — rotating sweeps, conic swirls, liquid mesh, aurora curtains,
+radial pulses, soft waves, scrolling diagonal stripes and silk interference, across
+several palettes). Clicking a card applies it as the motion source; it can then be
+fine-tuned in the shapes tab, and it travels through presets/export like any source. Shapes origin can be set by
 clicking the preview; the draw tab draws freehand directly over it. The panel is fully
 keyboard operable and `prefers-reduced-motion` freezes the source layer on its first frame
 (with a note in the lab).

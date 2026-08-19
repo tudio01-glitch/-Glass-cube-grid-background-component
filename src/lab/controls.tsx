@@ -47,24 +47,33 @@ export function SelectField<T extends string>({
   label,
   value,
   options,
+  groups,
   onChange,
 }: {
   label: string;
   value: T;
-  options: { value: T; label: string }[];
+  options?: { value: T; label: string }[];
+  groups?: { label: string; options: { value: T; label: string }[] }[];
   onChange: (v: T) => void;
 }) {
   const id = useId();
+  const renderOptions = (opts: { value: T; label: string }[]) =>
+    opts.map((o) => (
+      <option key={o.value} value={o.value}>
+        {o.label}
+      </option>
+    ));
   return (
     <div className="lab-field">
       <label className="lab-field-label" htmlFor={id}>
         {label}
       </label>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
+        {options && renderOptions(options)}
+        {groups?.map((g) => (
+          <optgroup key={g.label} label={g.label}>
+            {renderOptions(g.options)}
+          </optgroup>
         ))}
       </select>
     </div>

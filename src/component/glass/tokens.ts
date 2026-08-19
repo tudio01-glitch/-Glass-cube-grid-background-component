@@ -65,8 +65,24 @@ export type GlassSettings = {
   tint: string; // CSS color. default 'rgba(255,255,255,0.08)'
 };
 
+export type ShapeKind =
+  | 'circle'
+  | 'ripple'
+  | 'sine'
+  | 'blob'
+  | 'orbit'
+  // animated gradient family
+  | 'grad-sweep' // linear gradient rotating around the center
+  | 'grad-conic' // conic gradient spinning around the origin
+  | 'grad-mesh' // mesh-like field of huge soft radial gradients
+  | 'grad-aurora' // northern-lights curtains drifting sideways
+  | 'grad-pulse' // radial color rings breathing out of the origin
+  | 'grad-waves' // near-vertical gradient with undulating stops
+  | 'grad-stripes' // diagonal color bands scrolling
+  | 'grad-silk'; // translucent sweeps interfering like silk
+
 export type ShapesPreset = {
-  shape: 'circle' | 'ripple' | 'sine' | 'blob' | 'orbit';
+  shape: ShapeKind;
   colors: string[]; // 1-4 colors, default Bezeq palette
   size: number; // % of container min side
   count: number; // rings / blobs / waves

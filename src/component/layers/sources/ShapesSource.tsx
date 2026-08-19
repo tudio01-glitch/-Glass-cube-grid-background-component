@@ -149,12 +149,217 @@ const renderOrbit: Renderer = (ctx, w, h, pad, p, t) => {
   }
 };
 
+/* ---- animated gradient family ---- */
+
+function withAlpha(color: string, alpha: number): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (!m) return color;
+  let hex = m[1];
+  if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
+  const num = parseInt(hex, 16);
+  return `rgba(${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}, ${alpha})`;
+}
+
+/** Gently oscillating, monotonic gradient stop positions. */
+function wobbledStops(n: number, t: number, amp: number): number[] {
+  const pos: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const base = n === 1 ? 0.5 : i / (n - 1);
+    pos.push(Math.min(1, Math.max(0, base + Math.sin(t * 0.6 + i * 1.7) * amp)));
+  }
+  return pos.sort((a, b) => a - b);
+}
+
+/** Full-bleed linear gradient slowly rotating around the center. */
+const renderGradSweep: Renderer = (ctx, w, h, _pad, p, t) => {
+  const colors = palette(p);
+  const ang = (t * Math.PI * 2) / (BASE_CYCLE_S * 2);
+  const cx = w / 2;
+  const cy = h / 2;
+  const R = Math.hypot(w, h) / 2;
+  const g = ctx.createLinearGradient(
+    cx - Math.cos(ang) * R,
+    cy - Math.sin(ang) * R,
+    cx + Math.cos(ang) * R,
+    cy + Math.sin(ang) * R,
+  );
+  const pos = wobbledStops(colors.length, t, 0.3 / Math.max(2, colors.length));
+  colors.forEach((c, i) => g.addColorStop(pos[i], c));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+};
+
+/** Conic gradient spinning around the origin (falls back to sweep). */
+const renderGradConic: Renderer = (ctx, w, h, pad, p, t) => {
+  if (typeof ctx.createConicGradient !== 'function') {
+    renderGradSweep(ctx, w, h, pad, p, t);
+    return;
+  }
+  const colors = palette(p);
+  const o = originPx(p, w, h, pad);
+  const g = ctx.createConicGradient((t * Math.PI * 2) / (BASE_CYCLE_S * 1.5), o.x, o.y);
+  const n = colors.length;
+  for (let i = 0; i <= n; i++) g.addColorStop(i / n, colors[i % n]);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+};
+
+/** Mesh gradient: a loose lattice of huge soft radial gradients, drifting. */
+const renderGradMesh: Renderer = (ctx, w, h, _pad, p, t) => {
+  const colors = palette(p);
+  fillBackground(ctx, w, h, p);
+  const n = Math.max(3, Math.round(p.count));
+  const min = Math.min(w, h);
+  const R = (p.size / 100) * min * 1.6;
+  const cols = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / cols);
+  for (let k = 0; k < n; k++) {
+    const x = (((k % cols) + 0.5) / cols) * w + Math.sin(t * 0.31 + k * 2.4) * w * 0.16;
+    const y = ((Math.floor(k / cols) + 0.5) / rows) * h + Math.cos(t * 0.27 + k * 1.7) * h * 0.16;
+    const r = Math.max(1, R * (0.75 + 0.25 * Math.sin(t * 0.4 + k * 1.1)));
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const c = colors[k % colors.length];
+    g.addColorStop(0, withAlpha(c, 0.85));
+    g.addColorStop(1, withAlpha(c, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+};
+
+/** Northern-lights curtains drifting sideways over a dark ground. */
+const renderGradAurora: Renderer = (ctx, w, h, _pad, p, t) => {
+  const colors = palette(p);
+  fillBackground(ctx, w, h, p);
+  const n = Math.max(2, Math.round(p.count));
+  const bandW = Math.max(40, (p.size / 100) * w * 0.9);
+  ctx.globalCompositeOperation = 'lighter';
+  for (let k = 0; k < n; k++) {
+    const c = colors[k % colors.length];
+    const xc = ((k + 0.5) / n) * w + Math.sin(t * 0.23 + k * 1.9) * w * 0.22;
+    const g = ctx.createLinearGradient(xc - bandW / 2, 0, xc + bandW / 2, 0);
+    g.addColorStop(0, withAlpha(c, 0));
+    g.addColorStop(0.5, withAlpha(c, 0.5));
+    g.addColorStop(1, withAlpha(c, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  const fade = ctx.createLinearGradient(0, 0, 0, h);
+  fade.addColorStop(0, 'rgba(0,0,0,0)');
+  fade.addColorStop(1, withAlpha(colors[colors.length - 1], 0.55));
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, w, h);
+};
+
+/** Radial color rings breathing out of the origin. */
+const renderGradPulse: Renderer = (ctx, w, h, pad, p, t) => {
+  const colors = palette(p);
+  const o = originPx(p, w, h, pad);
+  const maxR = Math.hypot(Math.max(o.x, w - o.x), Math.max(o.y, h - o.y));
+  const cycles = Math.max(1, Math.round(p.count / 2));
+  const total = cycles * colors.length;
+  const phase = (((t / BASE_CYCLE_S) % 1) + 1) % 1;
+  const stops: { pos: number; c: string }[] = [];
+  for (let j = 0; j < total; j++) {
+    stops.push({ pos: (j / total + phase) % 1, c: colors[j % colors.length] });
+  }
+  stops.sort((a, b) => a.pos - b.pos);
+  const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, maxR);
+  g.addColorStop(0, stops[0].c);
+  for (const s of stops) g.addColorStop(s.pos, s.c);
+  g.addColorStop(1, stops[stops.length - 1].c);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+};
+
+/** Near-vertical gradient whose color bands undulate. */
+const renderGradWaves: Renderer = (ctx, w, h, _pad, p, t) => {
+  const colors = palette(p);
+  const ang = Math.PI / 2 + Math.sin(t * 0.2) * 0.15;
+  const cx = w / 2;
+  const cy = h / 2;
+  const R = h * 0.65;
+  const g = ctx.createLinearGradient(
+    cx - Math.cos(ang) * R,
+    cy - Math.sin(ang) * R,
+    cx + Math.cos(ang) * R,
+    cy + Math.sin(ang) * R,
+  );
+  const pos = wobbledStops(colors.length, t, 0.45 / Math.max(2, colors.length));
+  colors.forEach((c, i) => g.addColorStop(pos[i], c));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+};
+
+/** Diagonal color bands scrolling along their own direction. */
+const renderGradStripes: Renderer = (ctx, w, h, _pad, p, t) => {
+  const colors = palette(p);
+  const n = colors.length;
+  const min = Math.min(w, h);
+  const stripe = Math.max(20, (p.size / 100) * min * 0.35);
+  const cycleLen = stripe * n;
+  const diag = Math.hypot(w, h);
+  const dir = Math.SQRT1_2;
+  const offset = ((((t / BASE_CYCLE_S) % 1) + 1) % 1) * cycleLen;
+  const start = -offset - cycleLen;
+  const cyclesNeeded = Math.ceil((diag + 2 * cycleLen) / cycleLen);
+  const g = ctx.createLinearGradient(
+    start * dir,
+    start * dir,
+    (start + cyclesNeeded * cycleLen) * dir,
+    (start + cyclesNeeded * cycleLen) * dir,
+  );
+  const steps = cyclesNeeded * n;
+  for (let j = 0; j <= steps; j++) g.addColorStop(j / steps, colors[j % n]);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+};
+
+/** Translucent sweeps crossing at different rates — silky interference. */
+const renderGradSilk: Renderer = (ctx, w, h, _pad, p, t) => {
+  const colors = palette(p);
+  const base = ctx.createLinearGradient(0, 0, 0, h);
+  base.addColorStop(0, colors[colors.length - 1]);
+  base.addColorStop(1, colors[Math.max(0, colors.length - 2)]);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'lighter';
+  const layers = Math.max(2, Math.min(4, Math.round(p.count / 2)));
+  const R = Math.hypot(w, h) / 2;
+  const cx = w / 2;
+  const cy = h / 2;
+  for (let k = 0; k < layers; k++) {
+    const ang = t * (0.18 + k * 0.07) * (k % 2 ? -1 : 1) + k * 1.3;
+    const g = ctx.createLinearGradient(
+      cx - Math.cos(ang) * R,
+      cy - Math.sin(ang) * R,
+      cx + Math.cos(ang) * R,
+      cy + Math.sin(ang) * R,
+    );
+    const c = colors[k % colors.length];
+    g.addColorStop(0, withAlpha(c, 0));
+    g.addColorStop(0.5, withAlpha(c, 0.28));
+    g.addColorStop(1, withAlpha(c, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+};
+
 const renderers: Record<ShapesPreset['shape'], Renderer> = {
   circle: renderCircle,
   ripple: renderRipple,
   sine: renderSine,
   blob: renderBlob,
   orbit: renderOrbit,
+  'grad-sweep': renderGradSweep,
+  'grad-conic': renderGradConic,
+  'grad-mesh': renderGradMesh,
+  'grad-aurora': renderGradAurora,
+  'grad-pulse': renderGradPulse,
+  'grad-waves': renderGradWaves,
+  'grad-stripes': renderGradStripes,
+  'grad-silk': renderGradSilk,
 };
 
 function renderShapes(
