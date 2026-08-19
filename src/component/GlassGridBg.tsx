@@ -14,7 +14,7 @@ import {
   normalizeTiles,
   tokensToStyle,
 } from './glass/tokens';
-import { isStencilId, maskAt, rasterizeStencil } from './glass/stencils';
+import { buildCropMaskUrl, isStencilId, maskAt, rasterizeStencil } from './glass/stencils';
 import type {
   GlassGridBgProps,
   GlassQuality,
@@ -527,6 +527,45 @@ export function GlassGridBg({
      
   }, [stencilMask, layout, t.gapX, t.gapY, st.scale, st.invert]);
 
+  /*
+   * Background crop: with a stencil active, the motion layer is masked to
+   * the tiles' silhouette (dilated by ~half a tile so edge tiles keep
+   * background behind them). The mask sits on a non-transforming wrapper,
+   * so parallax/zoom/skew move the source *under* a pinned crop window;
+   * the glass counter-drift is compensated through --ggb-par-grid-px.
+   */
+  const cropStyle = useMemo<CSSProperties | null>(() => {
+    if (!stencilMask) return null;
+    const gridW = layout.cols * layout.tileSize + (layout.cols - 1) * t.gapX;
+    const gridH = layout.rows * layout.tileSize + (layout.rows - 1) * t.gapY;
+    const side = Math.max(1, (st.scale / 100) * Math.min(gridW, gridH));
+    const url = buildCropMaskUrl({
+      shape: st.shape,
+      customMask: st.shape === 'custom' ? st.mask : null,
+      gridW,
+      gridH,
+      sidePx: side,
+      dilatePx: layout.tileSize * 0.55,
+      invert: st.invert,
+    });
+    if (!url) return null;
+    const zg = Math.max(0.05, zm.grid);
+    const size = `${gridW * zg}px ${gridH * zg}px`;
+    // the mask box spans the grid box, centered like the grid itself; the
+    // glass parallax counter-drift is compensated so the crop stays pinned
+    const pos = 'center calc(50% + var(--ggb-par-grid-px))';
+    return {
+      WebkitMaskImage: `url(${url})`,
+      maskImage: `url(${url})`,
+      WebkitMaskRepeat: 'no-repeat',
+      maskRepeat: 'no-repeat',
+      WebkitMaskSize: size,
+      maskSize: size,
+      WebkitMaskPosition: pos,
+      maskPosition: pos,
+    };
+  }, [stencilMask, st.shape, st.mask, st.invert, st.scale, layout, t.gapX, t.gapY, zm.grid]);
+
   const weaveActive = wv.mode !== 'off';
   const tileHeights = useMemo(() => {
     if (!weaveActive) return null;
@@ -577,8 +616,10 @@ export function GlassGridBg({
       data-ggb-capped={layout.capped || undefined}
     >
       <div className="ggb-surface">
-        <div className="ggb-source">
-          <BackgroundLayer source={src} />
+        <div className="ggb-source-clip" style={cropStyle ?? undefined}>
+          <div className="ggb-source">
+            <BackgroundLayer source={src} />
+          </div>
         </div>
         <div ref={gridRef} className="ggb-grid" style={gridStyle} aria-hidden="true">
           {Array.from({ length: layout.cols * layout.rows }, (_, i) => {

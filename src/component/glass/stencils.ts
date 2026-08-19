@@ -292,6 +292,7 @@ export function drawStencil(id: StencilId, ctx: CanvasRenderingContext2D, size: 
 }
 
 const MASK_RES = 64;
+const CROP_RES = 256; // hi-res raster for the background crop mask
 const maskCache = new Map<string, Heightmap>();
 
 function canvasToMask(canvas: HTMLCanvasElement): Heightmap {
@@ -318,6 +319,88 @@ export function rasterizeStencil(id: StencilId): Heightmap {
   const mask = canvasToMask(canvas);
   maskCache.set(id, mask);
   return mask;
+}
+
+function maskToCanvas(mask: Heightmap): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = mask.size;
+  canvas.height = mask.size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const img = ctx.createImageData(mask.size, mask.size);
+  for (let i = 0; i < mask.data.length; i++) {
+    img.data[i * 4] = 255;
+    img.data[i * 4 + 1] = 255;
+    img.data[i * 4 + 2] = 255;
+    img.data[i * 4 + 3] = (mask.data[i] ?? 0) > 0.5 ? 255 : 0;
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+/**
+ * Builds the CSS mask-image that crops the background to the tiles'
+ * silhouette. The raster covers the whole grid box (correct aspect), the
+ * shape sits centered at its sampling square, and it is dilated by
+ * `dilatePx` (multi-offset painting) so edge tiles keep background behind
+ * them. With `invert` the shape becomes an eroded hole in a full cover.
+ */
+export function buildCropMaskUrl(opts: {
+  shape: string;
+  customMask: Heightmap | null;
+  gridW: number;
+  gridH: number;
+  sidePx: number;
+  dilatePx: number;
+  invert: boolean;
+}): string {
+  const { shape, customMask, gridW, gridH, sidePx, dilatePx, invert } = opts;
+  const builtin = isStencilId(shape) ? shape : null;
+  const custom = shape === 'custom' && customMask ? maskToCanvas(customMask) : null;
+  if (!builtin && !custom) return '';
+  const scale = CROP_RES / Math.max(1, Math.max(gridW, gridH));
+  const W = Math.max(2, Math.round(gridW * scale));
+  const H = Math.max(2, Math.round(gridH * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  const paint = (ox: number, oy: number, side: number) => {
+    const x = (W - side) / 2 + ox;
+    const y = (H - side) / 2 + oy;
+    if (builtin) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#fff';
+      drawStencil(builtin, ctx, side);
+      ctx.restore();
+    } else if (custom) {
+      ctx.drawImage(custom, x, y, side, side);
+    }
+  };
+
+  const side = sidePx * scale;
+  const d = Math.max(0, dilatePx * scale);
+  if (!invert) {
+    // dilation: paint the silhouette at a ring of offsets around center
+    paint(0, 0, side);
+    const steps = 16;
+    for (let k = 0; k < steps; k++) {
+      const a = (k / steps) * Math.PI * 2;
+      paint(Math.cos(a) * d, Math.sin(a) * d, side);
+    }
+  } else {
+    // full cover minus an eroded hole (scaled-down shape approximates erosion)
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'destination-out';
+    paint(0, 0, Math.max(1, side - 2 * d));
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  return canvas.toDataURL('image/png');
 }
 
 /** Rasterizes an uploaded icon (SVG/PNG) into a mask by its alpha silhouette. */

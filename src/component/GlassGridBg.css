@@ -107,6 +107,14 @@
   background: var(--ggb-color-4);
 }
 
+/* stencil crop host: masks the motion layer to the tiles' silhouette while
+   staying transform-free, so the crop window is pinned to the glass */
+.ggb-source-clip {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
 .ggb-source {
   position: absolute;
   inset: 0;
