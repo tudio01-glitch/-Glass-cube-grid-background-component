@@ -379,3 +379,28 @@ body {
   cursor: crosshair;
   touch-action: none;
 }
+
+/* saved presets */
+.lab-preset-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lab-preset-item {
+  display: flex;
+  gap: 6px;
+}
+
+.lab-preset-item .lab-button:first-child {
+  flex: 1;
+  text-align: start;
+}
+
+.lab-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

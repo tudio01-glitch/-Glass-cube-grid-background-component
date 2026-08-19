@@ -76,11 +76,13 @@ export function TextField({
   value,
   onChange,
   placeholder,
+  dir = 'ltr',
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  dir?: 'ltr' | 'rtl';
 }) {
   const id = useId();
   return (
@@ -91,7 +93,7 @@ export function TextField({
       <input
         id={id}
         type="text"
-        dir="ltr"
+        dir={dir}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}

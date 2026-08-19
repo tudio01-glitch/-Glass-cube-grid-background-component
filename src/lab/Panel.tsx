@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BEZEQ_COLORS, defaultDrawSource, defaultSource } from '../component/glass/tokens';
+import {
+  BEZEQ_COLORS,
+  defaultDrawSource,
+  defaultPreset,
+  defaultSource,
+} from '../component/glass/tokens';
 import type {
   DrawMotion,
   GlassGridPreset,
@@ -112,7 +117,97 @@ export function Panel(props: PanelProps) {
       <Group title="ייצוא">
         <ExportControls preset={preset} />
       </Group>
+
+      <Group title="פריסטים">
+        <PresetsControls {...props} />
+      </Group>
     </aside>
+  );
+}
+
+/* ---- presets (localStorage) ---- */
+
+const STORAGE_KEY = 'ggb-presets';
+
+function loadStoredPresets(): Record<string, GlassGridPreset> {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, GlassGridPreset>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function PresetsControls({ preset, onChange }: PanelProps) {
+  const [name, setName] = useState('');
+  const [stored, setStored] = useState<Record<string, GlassGridPreset>>(loadStoredPresets);
+
+  const persist = (next: Record<string, GlassGridPreset>) => {
+    setStored(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // quota exceeded (large uploads) — the in-memory list still works
+    }
+  };
+
+  const save = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    persist({ ...stored, [trimmed]: preset });
+    setName('');
+  };
+
+  const remove = (key: string) => {
+    const next = { ...stored };
+    delete next[key];
+    persist(next);
+  };
+
+  const names = Object.keys(stored);
+
+  return (
+    <>
+      <TextField label="שם" value={name} dir="rtl" placeholder="שם לפריסט חדש" onChange={setName} />
+      <div className="lab-actions">
+        <button type="button" className="lab-button" disabled={!name.trim()} onClick={save}>
+          לשמור פריסט
+        </button>
+        <button
+          type="button"
+          className="lab-button"
+          onClick={() => onChange(structuredClone(defaultPreset))}
+        >
+          לאפס לברירת המחדל של בזק
+        </button>
+      </div>
+      {names.length > 0 && (
+        <ul className="lab-preset-list">
+          {names.map((n) => (
+            <li key={n} className="lab-preset-item">
+              <button
+                type="button"
+                className="lab-button"
+                onClick={() => onChange(structuredClone(stored[n]))}
+              >
+                לטעון: {n}
+              </button>
+              <button
+                type="button"
+                className="lab-button"
+                aria-label={`למחוק את הפריסט ${n}`}
+                onClick={() => remove(n)}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 
@@ -145,7 +240,7 @@ function ExportControls({ preset }: { preset: GlassGridPreset }) {
             run(copyText(formatCssTokens(preset)), 'טוקני ה‑CSS הועתקו', 'ההעתקה זמינה בדפדפן עם הרשאת לוח')
           }
         >
-          העתקת טוקני CSS
+          להעתיק טוקני CSS
         </button>
         <button
           type="button"
@@ -154,7 +249,7 @@ function ExportControls({ preset }: { preset: GlassGridPreset }) {
             run(copyText(formatPresetJson(preset)), 'ה‑JSON הועתק', 'ההעתקה זמינה בדפדפן עם הרשאת לוח')
           }
         >
-          העתקת JSON
+          להעתיק JSON
         </button>
         <button
           type="button"
@@ -167,7 +262,7 @@ function ExportControls({ preset }: { preset: GlassGridPreset }) {
             )
           }
         >
-          הורדת HTML עצמאי
+          להוריד HTML עצמאי
         </button>
       </div>
       {status && (
@@ -315,7 +410,7 @@ function DrawControls({ preset, onChange }: PanelProps) {
       )}
       <div className="lab-actions">
         <button type="button" className="lab-button" onClick={() => patchDraw({ path: [] })}>
-          ניקוי הציור
+          לנקות את הציור
         </button>
       </div>
     </>
