@@ -1,0 +1,145 @@
+/* glass-grid-bg — all values flow from the --ggb-* tokens, never hard-coded. */
+
+.ggb {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+
+  /* tokens (defaults; props override inline) */
+  --ggb-tile-size: 64px;
+  --ggb-tile-gap: 6px;
+  --ggb-tile-radius: 10px;
+  --ggb-tile-inset: 0px;
+  --ggb-tile-border: 1px;
+  --ggb-frost: 0;
+  --ggb-refraction: 100;
+  --ggb-dispersion: 100;
+  --ggb-depth: 100;
+  --ggb-splay: 100;
+  --ggb-light-angle: -45;
+  --ggb-light-intensity: 80;
+  --ggb-opacity: 12;
+  --ggb-tint: rgba(255, 255, 255, 0.08);
+  --ggb-color-1: #f74a84;
+  --ggb-color-2: #2a73f0;
+  --ggb-color-3: #52b9f0;
+  --ggb-color-4: #0b0b33;
+  --ggb-speed: 1;
+
+  /* derived */
+  --ggb-frost-px: calc(var(--ggb-frost) * 0.24px); /* 0-100 -> 0-24px */
+  --ggb-light-a: calc(var(--ggb-light-intensity) / 100);
+  --ggb-depth-a: calc(var(--ggb-depth) / 100);
+  --ggb-refraction-a: calc(var(--ggb-refraction) / 100);
+  --ggb-dispersion-a: calc(var(--ggb-dispersion) / 100);
+  --ggb-splay-px: calc(var(--ggb-splay) / 100 * var(--ggb-tile-size) * 0.28);
+  --ggb-light-grad-angle: calc(180deg + var(--ggb-light-angle) * 1deg);
+}
+
+/* 1. motion layer */
+.ggb-source {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--ggb-color-4);
+}
+
+.ggb-source > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 2. glass tile grid */
+.ggb-grid {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  display: grid;
+}
+
+.ggb-grid-fit-cover .ggb-grid,
+.ggb-grid-fit-contain .ggb-grid {
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+}
+
+.ggb-grid-fit-fixed .ggb-grid {
+  top: var(--ggb-tile-inset);
+  inset-inline-start: var(--ggb-tile-inset);
+}
+
+.ggb-tile {
+  position: relative;
+  border-radius: var(--ggb-tile-radius);
+  border: var(--ggb-tile-border) solid
+    rgba(255, 255, 255, calc(var(--ggb-light-a) * 0.3));
+  /* tile fill: tint color scaled by the opacity token */
+  background-color: color-mix(
+    in srgb,
+    var(--ggb-tint) calc(var(--ggb-opacity) * 1%),
+    transparent
+  );
+  backdrop-filter: blur(var(--ggb-frost-px)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--ggb-frost-px)) saturate(1.2);
+  box-shadow:
+    /* depth: thickness of the slab */
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--ggb-depth-a) * 0.45)),
+    inset 0 -1px 0 rgba(11, 11, 51, calc(var(--ggb-depth-a) * 0.4)),
+    inset 0 0 calc(var(--ggb-depth-a) * 10px) rgba(11, 11, 51, calc(var(--ggb-depth-a) * 0.14)),
+    /* refraction: bevel ring, width follows splay */
+    inset 0 0 var(--ggb-splay-px) calc(var(--ggb-splay-px) * -0.35)
+      rgba(255, 255, 255, calc(var(--ggb-refraction-a) * 0.5)),
+    inset 0 0 calc(var(--ggb-splay-px) * 0.5) calc(var(--ggb-splay-px) * -0.15)
+      rgba(11, 11, 51, calc(var(--ggb-refraction-a) * 0.18)),
+    /* dispersion: 1px chroma-fringed rings offset in opposite directions */
+    inset 1px 1px 0 0 rgba(255, 64, 96, calc(var(--ggb-dispersion-a) * 0.35)),
+    inset -1px -1px 0 0 rgba(64, 224, 255, calc(var(--ggb-dispersion-a) * 0.35));
+}
+
+/* frost 0: skip the backdrop snapshot entirely — big win at 200+ tiles */
+.ggb--frost-0 .ggb-tile {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* refraction: inner edge gradient — reads as the glass bending its backdrop */
+.ggb-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side at 50% 50%,
+    transparent calc(100% - var(--ggb-splay-px) * 2),
+    rgba(255, 255, 255, calc(var(--ggb-refraction-a) * 0.22)) calc(100% - var(--ggb-splay-px) * 0.4),
+    rgba(255, 255, 255, calc(var(--ggb-refraction-a) * 0.05)) 100%
+  );
+}
+
+/* light: directional highlight, angle + intensity driven */
+.ggb-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    var(--ggb-light-grad-angle),
+    rgba(255, 255, 255, calc(var(--ggb-light-a) * 0.28)) 0%,
+    rgba(255, 255, 255, calc(var(--ggb-light-a) * 0.07)) 38%,
+    rgba(255, 255, 255, 0) 58%,
+    rgba(11, 11, 51, calc(var(--ggb-light-a) * 0.12)) 100%
+  );
+}
+
+/* 3. container content */
+.ggb-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+}
