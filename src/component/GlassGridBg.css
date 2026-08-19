@@ -22,9 +22,16 @@
   --ggb-ptr-radius: 45;
   --ggb-grid-zoom: 1;
   --ggb-source-zoom: 1;
+  --ggb-float-amp: 8;
+  --ggb-float-dur: 6s;
+  --ggb-par-depth: 50;
+  --ggb-skew-max: 25;
   /* live cursor position (-1..1), written by the pointer-tilt loop */
   --ggb-ptr-x: 0;
   --ggb-ptr-y: 0;
+  /* live scroll progress (-1..1) + smoothed velocity, written by the parallax loop */
+  --ggb-par-p: 0;
+  --ggb-scroll-v: 0;
   --ggb-frost: 0;
   --ggb-refraction: 100;
   --ggb-dispersion: 100;
@@ -55,6 +62,21 @@
   --ggb-tilt-x-abs: max(var(--ggb-tilt-x), calc(-1 * var(--ggb-tilt-x)));
   --ggb-tilt-y-abs: max(var(--ggb-tilt-y), calc(-1 * var(--ggb-tilt-y)));
   --ggb-tilt-zoom: calc(1 + (var(--ggb-tilt-x-abs) + var(--ggb-tilt-y-abs)) / 150);
+  /* parallax: source drifts against scroll, the glass counter-drifts.
+     At depth 100 and full progress: source +-70px, glass -+25px — inside the
+     0.3-0.95x layer-speed band award sites ship (Firewatch/Locomotive/satus). */
+  --ggb-par-src-px: calc(var(--ggb-par-p) * var(--ggb-par-depth) * -0.7px);
+  --ggb-par-grid-px: calc(var(--ggb-par-p) * var(--ggb-par-depth) * 0.25px);
+}
+
+/* parallax on: extra source zoom headroom so drifting edges never show */
+.ggb--parallax {
+  --ggb-par-active: 1;
+}
+
+.ggb--parallax .ggb-source,
+.ggb--parallax .ggb-grid {
+  will-change: transform;
 }
 
 /* 0. the tilted surface: source + grid move as one plane; content stays flat.
@@ -89,7 +111,11 @@
   position: absolute;
   inset: 0;
   z-index: 0;
-  scale: var(--ggb-source-zoom);
+  translate: 0 var(--ggb-par-src-px);
+  scale: calc(
+    var(--ggb-source-zoom) * (1 + var(--ggb-par-active, 0) * var(--ggb-par-depth) * 0.0016)
+  );
+  transform: skewY(calc(var(--ggb-scroll-v) * var(--ggb-skew-max) * 0.03deg));
   transform-origin: 50% 50%;
 }
 
@@ -115,17 +141,78 @@
 .ggb-grid-fit-contain .ggb-grid {
   top: 50%;
   left: 50%;
-  translate: -50% -50%;
+  translate: -50% calc(-50% + var(--ggb-par-grid-px));
 }
 
 .ggb-grid-fit-fixed .ggb-grid {
   top: var(--ggb-tile-inset);
   inset-inline-start: var(--ggb-tile-inset);
+  translate: 0 var(--ggb-par-grid-px);
 }
 
+/*
+ * Each grid cell is a wrapper (.ggb-tile) carrying only the ambient float
+ * animation — a pure compositor transform — while the glass core
+ * (.ggb-tile-glass) carries the visual stack and the var-driven transforms.
+ * Keeping them separate lets float run at 60fps on mobile without fighting
+ * the pointer/weave transform composition.
+ */
 .ggb-tile {
   position: relative;
   border-radius: var(--ggb-tile-radius);
+  /* float amplitude rides on font-size so the keyframes stay var()-free —
+     var() inside keyframes forces per-frame style recalc on every tile,
+     while these em values resolve once and run on the compositor */
+  font-size: calc(var(--ggb-float-amp) * 1px);
+}
+
+@keyframes ggb-tile-float {
+  0%,
+  100% {
+    transform: translateY(-0.5em);
+  }
+  50% {
+    transform: translateY(0.5em);
+  }
+}
+
+.ggb--float-always .ggb-tile {
+  animation: ggb-tile-float var(--ggb-float-dur) cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  /* diagonal negative delay: every tile starts mid-cycle, the float reads
+     as a wave crossing the grid instead of a synchronized launch */
+  animation-delay: calc(var(--ggb-fi, 0) * -0.75s);
+}
+
+@media (pointer: coarse) {
+  .ggb--float-auto .ggb-tile {
+    animation: ggb-tile-float var(--ggb-float-dur) cubic-bezier(0.37, 0, 0.63, 1) infinite;
+    animation-delay: calc(var(--ggb-fi, 0) * -0.75s);
+  }
+}
+
+/* three duration buckets desynchronize neighbouring cycles organically */
+.ggb-tile:nth-child(3n) {
+  animation-duration: calc(var(--ggb-float-dur) * 0.87);
+}
+
+.ggb-tile:nth-child(3n + 1) {
+  animation-duration: calc(var(--ggb-float-dur) * 1.13);
+}
+
+/* offscreen: float pauses so hidden grids cost nothing */
+.ggb--offscreen .ggb-tile {
+  animation-play-state: paused;
+}
+
+/* adaptive quality: very dense grids skip the per-tile float entirely */
+.ggb--dense .ggb-tile {
+  animation: none;
+}
+
+.ggb-tile-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   border: var(--ggb-tile-border) solid
     rgba(255, 255, 255, calc(var(--ggb-light-a) * 0.3));
   /* tile fill: tint color scaled by the opacity token */
@@ -156,7 +243,7 @@
 }
 
 /* frost 0: skip the backdrop snapshot entirely — big win at 200+ tiles */
-.ggb--frost-0 .ggb-tile {
+.ggb--frost-0 .ggb-tile-glass {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -166,7 +253,7 @@
  * tiles' own backdrop-filter can no longer see the source layer. Frost moves
  * to the grid element itself instead.
  */
-.ggb--q-hq .ggb-tile {
+.ggb--q-hq .ggb-tile-glass {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -181,7 +268,7 @@
  * area sets how much of the tile it covers, height how strongly it reads,
  * and the shape class (round / rect / dome) sets its silhouette.
  */
-.ggb-tile::before {
+.ggb-tile-glass::before {
   content: '';
   position: absolute;
   inset: calc((100 - var(--ggb-relief-area)) * 0.5%);
@@ -202,26 +289,26 @@
       rgba(11, 11, 51, calc(var(--ggb-relief-h) * 0.3));
 }
 
-.ggb--relief-rect .ggb-tile::before {
+.ggb--relief-rect .ggb-tile-glass::before {
   border-radius: min(var(--ggb-tile-radius), 45%);
 }
 
 /* amorphous dome: organic blob silhouettes, varied across the grid */
-.ggb--relief-dome .ggb-tile::before {
+.ggb--relief-dome .ggb-tile-glass::before {
   border-radius: 43% 57% 61% 39% / 54% 45% 57% 46%;
 }
 
-.ggb--relief-dome .ggb-tile:nth-child(3n)::before {
+.ggb--relief-dome .ggb-tile:nth-child(3n) .ggb-tile-glass::before {
   border-radius: 61% 39% 47% 53% / 42% 58% 44% 56%;
 }
 
-.ggb--relief-dome .ggb-tile:nth-child(3n + 1)::before {
+.ggb--relief-dome .ggb-tile:nth-child(3n + 1) .ggb-tile-glass::before {
   border-radius: 52% 48% 38% 62% / 60% 41% 59% 40%;
 }
 
 /* light: directional highlight, angle + intensity driven.
    --ggb-h (0-1, set per tile when a weave is active) brightens raised tiles. */
-.ggb-tile::after {
+.ggb-tile-glass::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -244,7 +331,7 @@
  *   continuous embossed surface.
  * Everything defaults to 0, so the rule is inert until a feature is active.
  */
-.ggb-tile {
+.ggb-tile-glass {
   transform: perspective(600px) rotateX(calc(var(--ggb-ptr-rx, 0) * 1deg))
     rotateY(calc(var(--ggb-ptr-ry, 0) * 1deg))
     translateY(calc(var(--ggb-h, 0) * var(--ggb-weave-h) * -8px))
@@ -257,9 +344,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ggb-tile,
+  .ggb-tile-glass,
   .ggb-surface {
     transition: none;
+  }
+
+  .ggb-tile {
+    animation: none !important;
+  }
+
+  .ggb-source {
+    translate: 0 0;
+    transform: none;
   }
 }
 
@@ -268,4 +364,21 @@
   position: relative;
   z-index: 2;
   height: 100%;
+}
+
+/* iOS motion-permission chip (rendered by GlassGridGyroChip) */
+.ggb-gyro-chip {
+  position: absolute;
+  z-index: 5;
+  bottom: 14px;
+  inset-inline-start: 14px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: rgba(16, 18, 38, 0.85);
+  color: #e8ecff;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { GlassGridBg, computeGridLayout } from '../component/GlassGridBg';
+import { GlassGridBg, GlassGridGyroChip, computeGridLayout } from '../component/GlassGridBg';
 import { normalizePreset } from '../component/glass/tokens';
 import type { GlassGridPreset, Point } from '../component/glass/tokens';
 import { useReducedMotion } from '../component/layers/useReducedMotion';
@@ -12,11 +12,33 @@ import './lab.css';
 
 const bezeqDefault: GlassGridPreset = normalizePreset(defaultPresetJson);
 
+/**
+ * Scroll demo: wraps the component in a scrollable page-like column so the
+ * parallax between the background and the glass can be felt in the lab.
+ */
+function PreviewShell({
+  scrollDemo,
+  children,
+}: {
+  scrollDemo: boolean;
+  children: React.ReactNode;
+}) {
+  if (!scrollDemo) return <>{children}</>;
+  return (
+    <div className="lab-scroll-demo">
+      <div className="lab-scroll-spacer">⌄ לגלול מטה</div>
+      <div className="lab-scroll-stage">{children}</div>
+      <div className="lab-scroll-spacer">⌃ לגלול מעלה</div>
+    </div>
+  );
+}
+
 export default function LabPage() {
   const [preset, setPreset] = useState<GlassGridPreset>(bezeqDefault);
   const [originPicking, setOriginPicking] = useState(false);
   const [tab, setTab] = useState<SourceTab>(() => categoryOf(bezeqDefault.source));
   const [showSample, setShowSample] = useState(false);
+  const [scrollDemo, setScrollDemo] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const [previewBox, setPreviewBox] = useState({ w: 484, h: 484 });
   const reduced = useReducedMotion();
@@ -79,6 +101,17 @@ export default function LabPage() {
             />
             להציג תוכן לדוגמה
           </label>
+          <label className="lab-sample-toggle">
+            <input
+              type="checkbox"
+              checked={scrollDemo}
+              onChange={(e) => {
+                setScrollDemo(e.target.checked);
+                if (e.target.checked) setOriginPicking(false);
+              }}
+            />
+            תצוגת גלילה (פרלקס)
+          </label>
         </header>
         {layout.capped && (
           <p className="lab-note lab-note-warning" role="status">
@@ -102,29 +135,35 @@ export default function LabPage() {
           </p>
         )}
         <div className="lab-preview-box" ref={previewRef}>
-          <GlassGridBg
-            tiles={preset.tiles}
-            glass={preset.glass}
-            tilt={preset.tilt}
-            pointerTilt={preset.pointerTilt}
-            relief={preset.relief}
-            weave={preset.weave}
-            zoom={preset.zoom}
-            source={preset.source}
-            quality={preset.quality}
-            className="lab-preview-ggb"
-          >
-            {showSample && (
-              <div className="lab-sample">
-                <h2 className="lab-sample-title">רשת שמרגישים דרך הזכוכית</h2>
-                <p className="lab-sample-sub">כל מה שזז מאחור נשבר, מתעדשן ומתפזר</p>
-                <button type="button" className="lab-sample-cta">
-                  לגלות עוד
-                </button>
-              </div>
-            )}
-          </GlassGridBg>
-          {tab === 'draw' && preset.source.kind === 'draw' && !originPicking && (
+          <PreviewShell scrollDemo={scrollDemo}>
+            <GlassGridBg
+              tiles={preset.tiles}
+              glass={preset.glass}
+              tilt={preset.tilt}
+              pointerTilt={preset.pointerTilt}
+              relief={preset.relief}
+              weave={preset.weave}
+              zoom={preset.zoom}
+              motionFx={preset.motionFx}
+              source={preset.source}
+              quality={preset.quality}
+              className="lab-preview-ggb"
+            >
+              {showSample && (
+                <div className="lab-sample">
+                  <h2 className="lab-sample-title">רשת שמרגישים דרך הזכוכית</h2>
+                  <p className="lab-sample-sub">כל מה שזז מאחור נשבר, מתעדשן ומתפזר</p>
+                  <button type="button" className="lab-sample-cta">
+                    לגלות עוד
+                  </button>
+                </div>
+              )}
+            </GlassGridBg>
+          </PreviewShell>
+          <GlassGridGyroChip
+            enabled={preset.motionFx.gyro === 'auto' && preset.pointerTilt.mode !== 'off'}
+          />
+          {!scrollDemo && tab === 'draw' && preset.source.kind === 'draw' && !originPicking && (
             <DrawCanvas
               stroke={preset.source.stroke}
               color={preset.source.color}
@@ -136,7 +175,7 @@ export default function LabPage() {
               }}
             />
           )}
-          {originPicking && (
+          {!scrollDemo && originPicking && (
             <button
               type="button"
               className="lab-origin-overlay"

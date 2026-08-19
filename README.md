@@ -105,6 +105,10 @@ Every token can be overridden per instance.
 | `--ggb-ptr-radius` | `pointerTilt.radius` | `45` (% of min side) |
 | `--ggb-grid-zoom` | `zoom.grid` | `1` (scale of the tile layer, 0.5–2) |
 | `--ggb-source-zoom` | `zoom.source` | `1` (scale of the background layer, 0.5–3) |
+| `--ggb-float-amp` | `motionFx.floatAmplitude` | `8` (px) |
+| `--ggb-float-dur` | `motionFx.floatSpeed` | `6s` at speed 1 |
+| `--ggb-par-depth` | `motionFx.parallaxDepth` | `50` |
+| `--ggb-skew-max` | `motionFx.scrollSkew` | `25` |
 | `--ggb-relief-area` | `relief.area` | `78` (% of tile the bump covers) |
 | `--ggb-relief-height` | `relief.height` | `55` (bump intensity) |
 | `--ggb-weave-height` | `weave.height` | `50` (global relief strength) |
@@ -148,6 +152,34 @@ sample texts/buttons only appear when the «להציג תוכן לדוגמה» t
 (with separate horizontal/vertical brick gaps), glass (including the light-angle dial and
 the CSS/HQ toggle), surface tilt + pointer tilt, background (tabs: shapes / gallery /
 upload / draw), export, presets (localStorage + Bezeq-default reset).
+
+### Mobile & award-site motion (`motionFx`)
+
+Numbers grounded in how shipped award sites do it (Lenis/Locomotive lerp factors,
+Darkroom `satus` parallax depths, GSAP velocity-skew clamps):
+
+- **Ambient float** — tiles gently breathe when idle. `float: 'auto'` (default) runs on
+  coarse-pointer (touch) devices only, `'always'`/`'off'` override. Pure compositor
+  keyframes (amplitude rides on `font-size` so keyframes stay `var()`-free), diagonal
+  negative delays make it read as a wave, three duration buckets desynchronize
+  neighbours. Pauses offscreen; grids above 250 tiles skip it (adaptive quality).
+- **Scroll parallax** — the source drifts against scroll while the glass counter-drifts
+  (at depth 100: ±70px vs ∓25px), with automatic source zoom headroom, a Lenis-style
+  time-corrected lerp (0.12/frame), and a scroll-velocity `skewY` on the source
+  (production band, ≤3° at `scrollSkew` 100). Runs only while visible; listens with
+  passive capture so it works inside any scroll container. Try the «תצוגת גלילה»
+  toggle in the lab.
+- **Gyro tilt** — on touch devices, device orientation feeds the same pointer-tilt
+  system as a virtual cursor: the phone's physical tilt bends the glass. Neutral grip
+  is calibrated from the first 10 samples, axes remap on rotation, input clamps at
+  ±18° with a 0.6 gain, and an actively used pointer always wins over the sensor.
+  iOS permission: render the exported `<GlassGridGyroChip />` inside the container
+  (or call `requestGyroPermission()` from your own tap handler).
+- **Tap pulse** — a tap sends a tilt wave rolling outward through the tiles, the touch
+  counterpart of the hover bend. Rides the pointer-tilt strength; tiles mode only.
+
+All of it is disabled under `prefers-reduced-motion` — binary, no reduced-amplitude
+compromise.
 
 ### Pixel play & zoom
 

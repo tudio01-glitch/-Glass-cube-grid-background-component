@@ -21,6 +21,23 @@ export type TiltSettings = {
   perspective: number; // px. default 900
 };
 
+/**
+ * Mobile / award-site motion layer: ambient float of the tiles, scroll
+ * parallax between the background and the glass (with a scroll-velocity
+ * skew), gyroscope-driven tilt, and a tap ripple that rolls through the
+ * tiles — the touch counterpart of the pointer hover.
+ */
+export type MotionFxSettings = {
+  float: 'off' | 'auto' | 'always'; // auto = coarse-pointer (touch) devices only
+  floatAmplitude: number; // px, default 6
+  floatSpeed: number; // 0.1-3, 1 = ~5s cycle. default 1
+  parallax: 'off' | 'on'; // scroll parallax source vs glass
+  parallaxDepth: number; // 0-100, default 50
+  scrollSkew: number; // 0-100, velocity skew of the source layer. default 25
+  gyro: 'off' | 'auto'; // device-orientation feeds the pointer-tilt system
+  tapPulse: 'off' | 'on'; // tap sends a tilt wave through the tiles
+};
+
 /** Visual zoom of the two layers, as scale factors. */
 export type ZoomSettings = {
   grid: number; // glass tile layer, 0.5-2. default 1
@@ -126,6 +143,7 @@ export type GlassGridBgProps = {
   relief?: Partial<ReliefSettings>; // per-tile bump
   weave?: Partial<WeaveSettings>; // global relief across all tiles
   zoom?: Partial<ZoomSettings>; // visual zoom of grid / background layers
+  motionFx?: Partial<MotionFxSettings>; // float / parallax / gyro / tap pulse
   source?: MotionSource; // what moves behind the glass
   quality?: GlassQuality; // hq = SVG displacement filters (refraction/dispersion)
   className?: string;
@@ -141,6 +159,7 @@ export type GlassGridPreset = {
   relief: ReliefSettings;
   weave: WeaveSettings;
   zoom: ZoomSettings;
+  motionFx: MotionFxSettings;
   source: MotionSource;
   quality: GlassQuality;
 };
@@ -174,6 +193,17 @@ export const defaultPointerTilt: PointerTiltSettings = {
 export const defaultZoom: ZoomSettings = {
   grid: 1,
   source: 1,
+};
+
+export const defaultMotionFx: MotionFxSettings = {
+  float: 'auto',
+  floatAmplitude: 8,
+  floatSpeed: 1,
+  parallax: 'on',
+  parallaxDepth: 50,
+  scrollSkew: 25,
+  gyro: 'auto',
+  tapPulse: 'on',
 };
 
 export const defaultRelief: ReliefSettings = {
@@ -239,6 +269,7 @@ export const defaultPreset: GlassGridPreset = {
   relief: defaultRelief,
   weave: defaultWeave,
   zoom: defaultZoom,
+  motionFx: defaultMotionFx,
   source: defaultSource,
   quality: 'css',
 };
@@ -253,6 +284,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     relief?: Partial<ReliefSettings>;
     weave?: Partial<WeaveSettings>;
     zoom?: Partial<ZoomSettings>;
+    motionFx?: Partial<MotionFxSettings>;
     source?: MotionSource;
     quality?: GlassQuality;
   };
@@ -264,6 +296,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     relief: { ...defaultRelief, ...p.relief },
     weave: { ...defaultWeave, ...p.weave },
     zoom: { ...defaultZoom, ...p.zoom },
+    motionFx: { ...defaultMotionFx, ...p.motionFx },
     source: p.source ?? defaultSource,
     quality: p.quality === 'hq' ? 'hq' : 'css',
   };
@@ -294,6 +327,7 @@ export function tokensToCssVars(
   weave: WeaveSettings = defaultWeave,
   pointerTilt: PointerTiltSettings = defaultPointerTilt,
   zoom: ZoomSettings = defaultZoom,
+  motionFx: MotionFxSettings = defaultMotionFx,
 ): Record<string, string> {
   const colors =
     source.kind === 'shapes' && source.preset.colors.length > 0
@@ -321,6 +355,10 @@ export function tokensToCssVars(
     '--ggb-ptr-radius': String(pointerTilt.radius),
     '--ggb-grid-zoom': String(zoom.grid),
     '--ggb-source-zoom': String(zoom.source),
+    '--ggb-float-amp': `${motionFx.floatAmplitude}`,
+    '--ggb-float-dur': `${(6 / Math.max(0.1, motionFx.floatSpeed)).toFixed(2)}s`,
+    '--ggb-par-depth': String(motionFx.parallaxDepth),
+    '--ggb-skew-max': String(motionFx.scrollSkew),
     '--ggb-light-angle': String(glass.lightAngle),
     '--ggb-light-intensity': String(glass.lightIntensity),
     '--ggb-opacity': String(glass.opacity),
@@ -342,6 +380,7 @@ export function tokensToStyle(
   weave: WeaveSettings = defaultWeave,
   pointerTilt: PointerTiltSettings = defaultPointerTilt,
   zoom: ZoomSettings = defaultZoom,
+  motionFx: MotionFxSettings = defaultMotionFx,
 ): CSSProperties {
   return tokensToCssVars(
     tiles,
@@ -352,5 +391,6 @@ export function tokensToStyle(
     weave,
     pointerTilt,
     zoom,
+    motionFx,
   ) as CSSProperties;
 }

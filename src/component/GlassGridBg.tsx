@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import {
   MAX_TILES,
   defaultGlass,
+  defaultMotionFx,
   defaultPointerTilt,
   defaultRelief,
   defaultSource,
@@ -59,6 +60,66 @@ export function computeGridLayout(
 }
 
 /**
+ * iOS 13+ gates device-orientation behind a permission that must be asked
+ * from a user gesture. Call this from a tap handler; on platforms without
+ * the gate it resolves true immediately.
+ */
+export async function requestGyroPermission(): Promise<boolean> {
+  if (typeof DeviceOrientationEvent === 'undefined') return false;
+  const D = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+  if (typeof D.requestPermission === 'function') {
+    try {
+      return (await D.requestPermission()) === 'granted';
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** True on iOS-style browsers where the gyro needs an explicit permission tap. */
+export function gyroNeedsPermission(): boolean {
+  if (typeof DeviceOrientationEvent === 'undefined') return false;
+  const D = DeviceOrientationEvent as unknown as { requestPermission?: unknown };
+  return typeof D.requestPermission === 'function';
+}
+
+/**
+ * Floating chip that asks for the iOS motion permission. Renders nothing on
+ * platforms that don't need the tap, on fine-pointer devices, under reduced
+ * motion, or once permission is granted. Place inside a positioned host.
+ */
+export function GlassGridGyroChip({
+  enabled = true,
+  label = 'להפעיל תנועת מכשיר',
+}: {
+  enabled?: boolean;
+  label?: string;
+}) {
+  const [granted, setGranted] = useState(false);
+  const [applicable] = useState(
+    () =>
+      gyroNeedsPermission() &&
+      window.matchMedia('(pointer: coarse)').matches &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+  if (!enabled || !applicable || granted) return null;
+  return (
+    <button
+      type="button"
+      className="ggb-gyro-chip"
+      onClick={() => {
+        void requestGyroPermission().then((ok) => {
+          if (ok) setGranted(true);
+        });
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
  * Global relief height (0-1) at a normalized grid position — the "weave":
  * one shape spanning all tiles so they read as a single surface.
  */
@@ -92,6 +153,7 @@ export function GlassGridBg({
   relief,
   weave,
   zoom,
+  motionFx,
   source,
   quality = 'css',
   className,
@@ -104,11 +166,13 @@ export function GlassGridBg({
   const rl = { ...defaultRelief, ...relief };
   const wv = { ...defaultWeave, ...weave };
   const zm = { ...defaultZoom, ...zoom };
+  const mfx = { ...defaultMotionFx, ...motionFx };
   const src = source ?? defaultSource;
   const reduced = useReducedMotion();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const [offscreen, setOffscreen] = useState(false);
   const [hqSupported] = useState(() => supportsHqGlass());
   const filterId = `ggb-glass-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 
@@ -125,7 +189,16 @@ export function GlassGridBg({
       );
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    // offscreen grids pause their ambient animations entirely
+    const io = new IntersectionObserver(
+      (entries) => setOffscreen(!(entries[0]?.isIntersecting ?? true)),
+      { threshold: 0.01, rootMargin: '200px' },
+    );
+    io.observe(el);
+    return () => {
+      ro.disconnect();
+      io.disconnect();
+    };
   }, []);
 
   const layout = useMemo(
@@ -134,21 +207,43 @@ export function GlassGridBg({
     [box.w, box.h, t.size, t.gapX, t.gapY, t.inset, t.fit],
   );
 
-  const vars = tokensToStyle(t, g, tl, src, rl, wv, pt, zm);
+  const vars = tokensToStyle(t, g, tl, src, rl, wv, pt, zm, mfx);
 
   /*
-   * Pointer tilt. 'tiles': every tile rotates toward the cursor with a
-   * distance falloff, so the grid bends around the pointer in every
-   * direction. 'surface': the whole plane tips after the static tilt.
+   * Interaction system. Three inputs feed the same per-tile tilt vars:
+   * - pointer hover ('tiles': tiles bend toward the cursor; 'surface': the
+   *   whole plane tips);
+   * - device orientation (gyro): the phone's physical tilt acts as a
+   *   virtual cursor, so mobile gets the same living surface;
+   * - tap pulse: a tap sends a tilt wave rolling outward through the tiles
+   *   — the touch counterpart of hover.
    * Written straight to CSS vars (no React state) to stay cheap per frame.
    */
   const gridRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const root = rootRef.current;
     const grid = gridRef.current;
-    if (!root || !grid || pt.mode === 'off' || reduced) return;
+    const pointerOn = pt.mode !== 'off';
+    const wavesOn = pt.mode === 'tiles' && mfx.tapPulse === 'on';
+    // gyro is a touch-device affordance — never fight the mouse on hybrids
+    const gyroOn =
+      pointerOn && mfx.gyro === 'auto' && window.matchMedia('(pointer: coarse)').matches;
+    if (!root || !grid || reduced || offscreen || !pointerOn) return;
     let raf = 0;
-    let cursor: { x: number; y: number } | null = null;
+    // input in raw root-local px (pointer) or normalized axes (gyro);
+    // the tiles branch maps both into grid-zoom-corrected space in one place
+    let input: { kind: 'pointer'; x: number; y: number } | { kind: 'gyro'; nx: number; ny: number } | null = null;
+    let waves: { x: number; y: number; t0: number }[] = [];
+    let baseBeta: number | null = null;
+    let lastPointerTs = 0;
+
+    const zoomCorrect = (w: number, h: number, x: number, y: number) => {
+      const zg = Math.max(0.05, zm.grid);
+      return {
+        x: w / 2 + (x - w / 2) / zg,
+        y: h / 2 + (y - h / 2) / zg,
+      };
+    };
 
     const clearTiles = () => {
       for (const child of Array.from(grid.children)) {
@@ -160,71 +255,243 @@ export function GlassGridBg({
 
     const apply = () => {
       raf = 0;
+      const r = root.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) return;
+
       if (pt.mode === 'surface') {
-        if (!cursor) {
-          root.style.setProperty('--ggb-ptr-x', '0');
-          root.style.setProperty('--ggb-ptr-y', '0');
-          return;
+        let nx = 0;
+        let ny = 0;
+        if (input?.kind === 'pointer') {
+          nx = (input.x / r.width) * 2 - 1;
+          ny = (input.y / r.height) * 2 - 1;
+        } else if (input?.kind === 'gyro') {
+          nx = input.nx;
+          ny = input.ny;
         }
-        const r = root.getBoundingClientRect();
-        root.style.setProperty('--ggb-ptr-x', (((cursor.x - r.left) / r.width) * 2 - 1).toFixed(3));
-        root.style.setProperty('--ggb-ptr-y', (((cursor.y - r.top) / r.height) * 2 - 1).toFixed(3));
+        root.style.setProperty('--ggb-ptr-x', Math.max(-1, Math.min(1, nx)).toFixed(3));
+        root.style.setProperty('--ggb-ptr-y', Math.max(-1, Math.min(1, ny)).toFixed(3));
         return;
       }
-      if (!cursor) {
+
+      // tiles mode
+      const now = performance.now();
+      const maxDim = Math.hypot(r.width, r.height);
+      const radiusPx = Math.max(40, (pt.radius / 100) * Math.min(r.width, r.height));
+      const maxDeg = (pt.strength / 100) * 28;
+      const bandW = radiusPx * 0.45;
+      const waveSpeed = maxDim * 1.1; // px/s — one sweep across in ~0.9s
+      waves = waves.filter((w) => ((now - w.t0) / 1000) * waveSpeed < maxDim + 4 * bandW);
+
+      let cursorPt: { x: number; y: number } | null = null;
+      if (input?.kind === 'pointer') {
+        cursorPt = zoomCorrect(r.width, r.height, input.x, input.y);
+      } else if (input?.kind === 'gyro') {
+        cursorPt = zoomCorrect(
+          r.width,
+          r.height,
+          (0.5 + Math.max(-1, Math.min(1, input.nx)) * 0.5) * r.width,
+          (0.5 + Math.max(-1, Math.min(1, input.ny)) * 0.5) * r.height,
+        );
+      }
+
+      if (!cursorPt && waves.length === 0) {
         clearTiles();
         return;
       }
-      const r = root.getBoundingClientRect();
-      // grid zoom scales tile screen positions around the center — map the
-      // cursor into unscaled grid coordinates so targeting stays exact
-      const zg = Math.max(0.05, zm.grid);
-      const px = r.width / 2 + (cursor.x - r.left - r.width / 2) / zg;
-      const py = r.height / 2 + (cursor.y - r.top - r.height / 2) / zg;
+
       const gridW = layout.cols * layout.tileSize + (layout.cols - 1) * t.gapX;
       const gridH = layout.rows * layout.tileSize + (layout.rows - 1) * t.gapY;
       const originX = t.fit === 'fixed' ? t.inset : (r.width - gridW) / 2;
       const originY = t.fit === 'fixed' ? t.inset : (r.height - gridH) / 2;
-      const radiusPx = Math.max(40, (pt.radius / 100) * Math.min(r.width, r.height));
-      const maxDeg = (pt.strength / 100) * 28;
       const children = grid.children;
       for (let i = 0; i < children.length; i++) {
         const col = i % layout.cols;
         const row = (i / layout.cols) | 0;
         const cx = originX + col * (layout.tileSize + t.gapX) + layout.tileSize / 2;
         const cy = originY + row * (layout.tileSize + t.gapY) + layout.tileSize / 2;
-        const dx = px - cx;
-        const dy = py - cy;
-        const influence = Math.max(0, 1 - Math.hypot(dx, dy) / radiusPx);
+        let rx = 0;
+        let ry = 0;
+        if (cursorPt) {
+          const dx = cursorPt.x - cx;
+          const dy = cursorPt.y - cy;
+          const influence = Math.max(0, 1 - Math.hypot(dx, dy) / radiusPx);
+          rx += (dy / radiusPx) * maxDeg * influence;
+          ry += (-dx / radiusPx) * maxDeg * influence;
+        }
+        for (const w of waves) {
+          const wdx = cx - w.x;
+          const wdy = cy - w.y;
+          const d = Math.max(1, Math.hypot(wdx, wdy));
+          const R = ((now - w.t0) / 1000) * waveSpeed;
+          const band = Math.exp(-(((d - R) / bandW) * ((d - R) / bandW)));
+          const decay = Math.exp(-R / (maxDim * 1.1));
+          const a = maxDeg * 1.3 * band * decay;
+          rx += (wdy / d) * a;
+          ry += (-wdx / d) * a;
+        }
         const el = children[i] as HTMLElement;
-        el.style.setProperty('--ggb-ptr-rx', ((dy / radiusPx) * maxDeg * influence).toFixed(2));
-        el.style.setProperty('--ggb-ptr-ry', ((-dx / radiusPx) * maxDeg * influence).toFixed(2));
+        el.style.setProperty('--ggb-ptr-rx', rx.toFixed(2));
+        el.style.setProperty('--ggb-ptr-ry', ry.toFixed(2));
       }
+      if (waves.length > 0) schedule(); // waves animate on their own clock
     };
 
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(apply);
     };
     const onMove = (e: PointerEvent) => {
-      cursor = { x: e.clientX, y: e.clientY };
+      const r = root.getBoundingClientRect();
+      lastPointerTs = performance.now();
+      input = { kind: 'pointer', x: e.clientX - r.left, y: e.clientY - r.top };
       schedule();
+    };
+    const onDown = (e: PointerEvent) => {
+      const r = root.getBoundingClientRect();
+      lastPointerTs = performance.now();
+      const raw = { x: e.clientX - r.left, y: e.clientY - r.top };
+      if (wavesOn) {
+        // wave origins live in grid-zoom-corrected space, like tile centers
+        waves.push({ ...zoomCorrect(r.width, r.height, raw.x, raw.y), t0: performance.now() });
+      }
+      input = { kind: 'pointer', ...raw };
+      schedule();
+    };
+    const onUp = (e: PointerEvent) => {
+      // touch has no hover: release the transient press cursor
+      if (e.pointerType === 'touch' && input?.kind === 'pointer') {
+        input = null;
+        schedule();
+      }
     };
     const onLeave = () => {
-      cursor = null;
+      if (input?.kind === 'pointer') {
+        input = null;
+        schedule();
+      }
+    };
+    // gyro calibration: the neutral grip = mean of the first 10 samples,
+    // recalibrated whenever the device rotates between portrait/landscape
+    let betaSamples: number[] = [];
+    const GYRO_RANGE = 18; // deg of physical tilt for full deflection
+    const GYRO_GAIN = 0.6; // sensor input never drives the tilt to hover max
+    const onOrient = (e: DeviceOrientationEvent) => {
+      if (e.beta == null || e.gamma == null) return;
+      // an actively used pointer wins over the sensor for a grace period
+      if (performance.now() - lastPointerTs < 1500) return;
+      if (baseBeta === null) {
+        betaSamples.push(e.beta);
+        if (betaSamples.length < 10) return;
+        baseBeta = betaSamples.reduce((s, v) => s + v, 0) / betaSamples.length;
+      }
+      const relBeta = e.beta - baseBeta;
+      const angle =
+        typeof screen !== 'undefined' && screen.orientation ? screen.orientation.angle : 0;
+      let gx: number;
+      let gy: number;
+      if (angle === 90) {
+        gx = relBeta;
+        gy = -e.gamma;
+      } else if (angle === 270 || angle === -90) {
+        gx = -relBeta;
+        gy = e.gamma;
+      } else if (angle === 180) {
+        gx = -e.gamma;
+        gy = -relBeta;
+      } else {
+        gx = e.gamma;
+        gy = relBeta;
+      }
+      input = {
+        kind: 'gyro',
+        nx: Math.max(-1, Math.min(1, gx / GYRO_RANGE)) * GYRO_GAIN,
+        ny: Math.max(-1, Math.min(1, gy / GYRO_RANGE)) * GYRO_GAIN,
+      };
       schedule();
     };
+    const onOrientationChange = () => {
+      baseBeta = null;
+      betaSamples = [];
+    };
     root.addEventListener('pointermove', onMove);
+    root.addEventListener('pointerdown', onDown);
+    root.addEventListener('pointerup', onUp);
+    root.addEventListener('pointercancel', onUp);
     root.addEventListener('pointerleave', onLeave);
+    if (gyroOn) {
+      window.addEventListener('deviceorientation', onOrient);
+      window.addEventListener('orientationchange', onOrientationChange);
+    }
     return () => {
       root.removeEventListener('pointermove', onMove);
+      root.removeEventListener('pointerdown', onDown);
+      root.removeEventListener('pointerup', onUp);
+      root.removeEventListener('pointercancel', onUp);
       root.removeEventListener('pointerleave', onLeave);
+      if (gyroOn) {
+        window.removeEventListener('deviceorientation', onOrient);
+        window.removeEventListener('orientationchange', onOrientationChange);
+      }
       if (raf) cancelAnimationFrame(raf);
       clearTiles();
       root.style.removeProperty('--ggb-ptr-x');
       root.style.removeProperty('--ggb-ptr-y');
     };
-     
-  }, [pt.mode, pt.strength, pt.radius, reduced, layout, t.gapX, t.gapY, t.inset, t.fit, zm.grid]);
+
+  }, [pt.mode, pt.strength, pt.radius, reduced, offscreen, layout, t.gapX, t.gapY, t.inset, t.fit, zm.grid, mfx.tapPulse, mfx.gyro]);
+
+  /*
+   * Scroll parallax: the source drifts against scroll while the glass
+   * counter-drifts, plus a scroll-velocity skew on the source. Lerped in a
+   * rAF loop that runs only while the element is visible and settling.
+   */
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || mfx.parallax !== 'on' || reduced || offscreen) return;
+    let raf = 0;
+    let running = true;
+    let cur = 0;
+    let prev = 0;
+    let vel = 0;
+    let lastTs = 0;
+    const LERP = 0.12; // per 60fps frame; time-corrected below (Lenis-style)
+    const step = (ts: number) => {
+      raf = 0;
+      if (!running) return;
+      const dt = lastTs ? Math.min(0.1, (ts - lastTs) / 1000) : 1 / 60;
+      lastTs = ts;
+      const r = root.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const target = Math.max(
+        -1,
+        Math.min(1, (r.top + r.height / 2 - vh / 2) / ((vh + r.height) / 2)),
+      );
+      const k = 1 - Math.pow(1 - LERP, dt * 60);
+      cur += (target - cur) * k;
+      vel = vel * Math.pow(0.85, dt * 60) + (cur - prev) * 4;
+      prev = cur;
+      root.style.setProperty('--ggb-par-p', cur.toFixed(4));
+      root.style.setProperty('--ggb-scroll-v', Math.max(-1, Math.min(1, vel)).toFixed(4));
+      if (Math.abs(target - cur) > 0.0005 || Math.abs(vel) > 0.0005) {
+        raf = requestAnimationFrame(step);
+      } else {
+        lastTs = 0;
+      }
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(step);
+    };
+    document.addEventListener('scroll', schedule, { capture: true, passive: true });
+    window.addEventListener('resize', schedule, { passive: true });
+    schedule();
+    return () => {
+      running = false;
+      document.removeEventListener('scroll', schedule, { capture: true });
+      window.removeEventListener('resize', schedule);
+      if (raf) cancelAnimationFrame(raf);
+      root.style.removeProperty('--ggb-par-p');
+      root.style.removeProperty('--ggb-scroll-v');
+    };
+  }, [mfx.parallax, reduced, offscreen]);
 
   const weaveActive = wv.mode !== 'off';
   const tileHeights = useMemo(() => {
@@ -257,7 +524,14 @@ export function GlassGridBg({
   if (g.frost <= 0) classes.push('ggb--frost-0');
   if (weaveActive) classes.push('ggb--weave');
   if (pt.mode !== 'off' && !reduced) classes.push(`ggb--ptr-${pt.mode}`);
+  if (mfx.float !== 'off' && !reduced) classes.push(`ggb--float-${mfx.float}`);
+  if (mfx.parallax === 'on' && !reduced) classes.push('ggb--parallax');
+  if (offscreen) classes.push('ggb--offscreen');
+  // adaptive quality: per-tile float is compositor-cheap, but not at any count
+  if (layout.cols * layout.rows > 250) classes.push('ggb--dense');
   if (className) classes.push(className);
+
+  const floatActive = mfx.float !== 'off' && !reduced;
 
   return (
     <div
@@ -273,17 +547,23 @@ export function GlassGridBg({
           <BackgroundLayer source={src} />
         </div>
         <div ref={gridRef} className="ggb-grid" style={gridStyle} aria-hidden="true">
-          {Array.from({ length: layout.cols * layout.rows }, (_, i) => (
-            <div
-              key={i}
-              className="ggb-tile"
-              style={
-                tileHeights
-                  ? ({ '--ggb-h': tileHeights[i].toFixed(3) } as CSSProperties)
-                  : undefined
-              }
-            />
-          ))}
+          {Array.from({ length: layout.cols * layout.rows }, (_, i) => {
+            const tileVars: Record<string, string> = {};
+            if (tileHeights) tileVars['--ggb-h'] = tileHeights[i].toFixed(3);
+            // diagonal phase index: the float ripples across the grid
+            if (floatActive) tileVars['--ggb-fi'] = String((i % layout.cols) + ((i / layout.cols) | 0));
+            return (
+              <div
+                key={i}
+                className="ggb-tile"
+                style={
+                  Object.keys(tileVars).length > 0 ? (tileVars as CSSProperties) : undefined
+                }
+              >
+                <div className="ggb-tile-glass" />
+              </div>
+            );
+          })}
         </div>
       </div>
       {effectiveQuality === 'hq' && (

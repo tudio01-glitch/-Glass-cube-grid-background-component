@@ -12,6 +12,7 @@ export function formatCssTokens(preset: GlassGridPreset): string {
     preset.weave,
     preset.pointerTilt,
     preset.zoom,
+    preset.motionFx,
   );
   const lines = Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`);
   return `.ggb {\n${lines.join('\n')}\n}\n`;

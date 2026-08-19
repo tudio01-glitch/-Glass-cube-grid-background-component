@@ -43,6 +43,16 @@
     "grid": 1,
     "source": 1
   },
+  "motionFx": {
+    "float": "auto",
+    "floatAmplitude": 8,
+    "floatSpeed": 1,
+    "parallax": "on",
+    "parallaxDepth": 50,
+    "scrollSkew": 25,
+    "gyro": "auto",
+    "tapPulse": "on"
+  },
   "source": {
     "kind": "shapes",
     "preset": {

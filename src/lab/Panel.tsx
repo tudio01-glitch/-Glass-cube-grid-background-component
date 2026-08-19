@@ -11,6 +11,7 @@ import type {
   DrawMotion,
   GlassGridPreset,
   GlassSettings,
+  MotionFxSettings,
   MotionSource,
   PixelEffect,
   PointerTiltSettings,
@@ -89,8 +90,10 @@ export function Panel(props: PanelProps) {
     onChange({ ...preset, pointerTilt: { ...preset.pointerTilt, ...patch } });
   const patchZoom = (patch: Partial<ZoomSettings>) =>
     onChange({ ...preset, zoom: { ...preset.zoom, ...patch } });
+  const patchMotionFx = (patch: Partial<MotionFxSettings>) =>
+    onChange({ ...preset, motionFx: { ...preset.motionFx, ...patch } });
 
-  const { tiles, glass, tilt, pointerTilt, zoom } = preset;
+  const { tiles, glass, tilt, pointerTilt, zoom, motionFx } = preset;
 
   return (
     <aside className="lab-panel" aria-label="הגדרות">
@@ -201,6 +204,94 @@ export function Panel(props: PanelProps) {
             onChange={(v) => patchPointerTilt({ radius: v })}
           />
         )}
+        {pointerTilt.mode === 'tiles' && (
+          <Segmented
+            label="גל הקשה"
+            value={motionFx.tapPulse}
+            options={[
+              { value: 'on', label: 'פעיל' },
+              { value: 'off', label: 'כבוי' },
+            ]}
+            onChange={(v) => patchMotionFx({ tapPulse: v })}
+          />
+        )}
+      </Group>
+
+      <Group title="מושן">
+        <h4 className="lab-subtitle">רחיפה — האריחים נושמים כשאין מגע</h4>
+        <SelectField
+          label="מצב"
+          value={motionFx.float}
+          options={[
+            { value: 'auto', label: 'אוטומטי — במסכי מגע' },
+            { value: 'always', label: 'תמיד' },
+            { value: 'off', label: 'כבוי' },
+          ]}
+          onChange={(v) => patchMotionFx({ float: v })}
+        />
+        {motionFx.float !== 'off' && (
+          <>
+            <Slider
+              label="משרעת"
+              min={0}
+              max={20}
+              value={motionFx.floatAmplitude}
+              unit="px"
+              onChange={(v) => patchMotionFx({ floatAmplitude: v })}
+            />
+            <Slider
+              label="מהירות"
+              min={0.1}
+              max={3}
+              step={0.1}
+              value={motionFx.floatSpeed}
+              onChange={(v) => patchMotionFx({ floatSpeed: v })}
+            />
+          </>
+        )}
+
+        <h4 className="lab-subtitle">פרלקס גלילה — הרקע והזכוכית נעים בקצב שונה</h4>
+        <Segmented
+          label="מצב"
+          value={motionFx.parallax}
+          options={[
+            { value: 'on', label: 'פעיל' },
+            { value: 'off', label: 'כבוי' },
+          ]}
+          onChange={(v) => patchMotionFx({ parallax: v })}
+        />
+        {motionFx.parallax === 'on' && (
+          <>
+            <Slider
+              label="עומק"
+              min={0}
+              max={100}
+              value={motionFx.parallaxDepth}
+              onChange={(v) => patchMotionFx({ parallaxDepth: v })}
+            />
+            <Slider
+              label="הטיית מהירות"
+              min={0}
+              max={100}
+              value={motionFx.scrollSkew}
+              onChange={(v) => patchMotionFx({ scrollSkew: v })}
+            />
+          </>
+        )}
+
+        <h4 className="lab-subtitle">חיישן תנועה — הטיית המכשיר מטה את הזכוכית</h4>
+        <Segmented
+          label="ג׳ירו"
+          value={motionFx.gyro}
+          options={[
+            { value: 'auto', label: 'אוטומטי' },
+            { value: 'off', label: 'כבוי' },
+          ]}
+          onChange={(v) => patchMotionFx({ gyro: v })}
+        />
+        <p className="lab-note" role="note">
+          ב‑iOS נדרש אישור בלחיצה — כפתור ההפעלה מופיע מעל התצוגה במכשירי מגע
+        </p>
       </Group>
 
       <Group title="רקע">

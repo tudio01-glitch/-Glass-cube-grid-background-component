@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GlassGridBg } from '../component/GlassGridBg';
+import { GlassGridBg, GlassGridGyroChip } from '../component/GlassGridBg';
 import { defaultPreset, normalizePreset } from '../component/glass/tokens';
 import type { GlassGridPreset } from '../component/glass/tokens';
 
@@ -31,6 +31,7 @@ createRoot(host!).render(
       relief={preset.relief}
       weave={preset.weave}
       zoom={preset.zoom}
+      motionFx={preset.motionFx}
       source={preset.source}
       quality={preset.quality}
       className={mountSelector ? 'ggb-embed' : 'ggb-standalone'}
@@ -43,5 +44,8 @@ createRoot(host!).render(
         </div>
       )}
     </GlassGridBg>
+    <GlassGridGyroChip
+      enabled={preset.motionFx.gyro === 'auto' && preset.pointerTilt.mode !== 'off'}
+    />
   </StrictMode>,
 );
