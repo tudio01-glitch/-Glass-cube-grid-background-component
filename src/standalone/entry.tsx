@@ -32,6 +32,7 @@ createRoot(host!).render(
       weave={preset.weave}
       zoom={preset.zoom}
       motionFx={preset.motionFx}
+      stencil={preset.stencil}
       source={preset.source}
       quality={preset.quality}
       className={mountSelector ? 'ggb-embed' : 'ggb-standalone'}

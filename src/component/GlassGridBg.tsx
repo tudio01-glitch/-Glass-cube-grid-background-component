@@ -7,12 +7,14 @@ import {
   defaultPointerTilt,
   defaultRelief,
   defaultSource,
+  defaultStencil,
   defaultTilt,
   defaultWeave,
   defaultZoom,
   normalizeTiles,
   tokensToStyle,
 } from './glass/tokens';
+import { isStencilId, maskAt, rasterizeStencil } from './glass/stencils';
 import type {
   GlassGridBgProps,
   GlassQuality,
@@ -154,6 +156,7 @@ export function GlassGridBg({
   weave,
   zoom,
   motionFx,
+  stencil,
   source,
   quality = 'css',
   className,
@@ -167,6 +170,7 @@ export function GlassGridBg({
   const wv = { ...defaultWeave, ...weave };
   const zm = { ...defaultZoom, ...zoom };
   const mfx = { ...defaultMotionFx, ...motionFx };
+  const st = { ...defaultStencil, ...stencil };
   const src = source ?? defaultSource;
   const reduced = useReducedMotion();
 
@@ -493,6 +497,36 @@ export function GlassGridBg({
     };
   }, [mfx.parallax, reduced, offscreen]);
 
+  /*
+   * Stencil layout: sample the shape mask at every tile center; tiles
+   * outside the silhouette keep their grid cell but render no glass.
+   */
+  const stencilMask = useMemo(() => {
+    if (st.shape === 'custom') return st.mask;
+    if (isStencilId(st.shape)) return rasterizeStencil(st.shape);
+    return null;
+  }, [st.shape, st.mask]);
+
+  const tileVisible = useMemo(() => {
+    if (!stencilMask) return null;
+    const gridW = layout.cols * layout.tileSize + (layout.cols - 1) * t.gapX;
+    const gridH = layout.rows * layout.tileSize + (layout.rows - 1) * t.gapY;
+    const side = Math.max(1, (st.scale / 100) * Math.min(gridW, gridH));
+    const visible: boolean[] = new Array(layout.cols * layout.rows);
+    for (let i = 0; i < visible.length; i++) {
+      const col = i % layout.cols;
+      const row = (i / layout.cols) | 0;
+      const px = col * (layout.tileSize + t.gapX) + layout.tileSize / 2;
+      const py = row * (layout.tileSize + t.gapY) + layout.tileSize / 2;
+      const u = 0.5 + (px - gridW / 2) / side;
+      const v = 0.5 + (py - gridH / 2) / side;
+      const inside = maskAt(stencilMask, u, v);
+      visible[i] = st.invert ? !inside : inside;
+    }
+    return visible;
+     
+  }, [stencilMask, layout, t.gapX, t.gapY, st.scale, st.invert]);
+
   const weaveActive = wv.mode !== 'off';
   const tileHeights = useMemo(() => {
     if (!weaveActive) return null;
@@ -548,6 +582,10 @@ export function GlassGridBg({
         </div>
         <div ref={gridRef} className="ggb-grid" style={gridStyle} aria-hidden="true">
           {Array.from({ length: layout.cols * layout.rows }, (_, i) => {
+            // stencil voids keep their grid cell but render no glass
+            if (tileVisible && !tileVisible[i]) {
+              return <div key={i} className="ggb-tile ggb-tile-void" />;
+            }
             const tileVars: Record<string, string> = {};
             if (tileHeights) tileVars['--ggb-h'] = tileHeights[i].toFixed(3);
             // diagonal phase index: the float ripples across the grid

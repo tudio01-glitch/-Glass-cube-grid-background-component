@@ -38,6 +38,19 @@ export type MotionFxSettings = {
   tapPulse: 'off' | 'on'; // tap sends a tilt wave through the tiles
 };
 
+/**
+ * Stencil layout: the glass tiles form a shape's silhouette instead of a
+ * full rectangle. `shape` is 'off', a built-in id (heart, wifi, house,
+ * iphone, ...), or 'custom' with an uploaded icon rasterized into `mask`.
+ */
+export type StencilSettings = {
+  shape: string; // 'off' | StencilId | 'custom'
+  mask: Heightmap | null; // silhouette of the custom icon
+  scale: number; // 20-100, % of the grid min side the shape spans. default 92
+  invert: boolean; // true = the shape is cut out of a full grid
+  fileName?: string;
+};
+
 /** Visual zoom of the two layers, as scale factors. */
 export type ZoomSettings = {
   grid: number; // glass tile layer, 0.5-2. default 1
@@ -144,6 +157,7 @@ export type GlassGridBgProps = {
   weave?: Partial<WeaveSettings>; // global relief across all tiles
   zoom?: Partial<ZoomSettings>; // visual zoom of grid / background layers
   motionFx?: Partial<MotionFxSettings>; // float / parallax / gyro / tap pulse
+  stencil?: Partial<StencilSettings>; // tiles form a shape instead of a full grid
   source?: MotionSource; // what moves behind the glass
   quality?: GlassQuality; // hq = SVG displacement filters (refraction/dispersion)
   className?: string;
@@ -160,6 +174,7 @@ export type GlassGridPreset = {
   weave: WeaveSettings;
   zoom: ZoomSettings;
   motionFx: MotionFxSettings;
+  stencil: StencilSettings;
   source: MotionSource;
   quality: GlassQuality;
 };
@@ -193,6 +208,13 @@ export const defaultPointerTilt: PointerTiltSettings = {
 export const defaultZoom: ZoomSettings = {
   grid: 1,
   source: 1,
+};
+
+export const defaultStencil: StencilSettings = {
+  shape: 'off',
+  mask: null,
+  scale: 92,
+  invert: false,
 };
 
 export const defaultMotionFx: MotionFxSettings = {
@@ -270,6 +292,7 @@ export const defaultPreset: GlassGridPreset = {
   weave: defaultWeave,
   zoom: defaultZoom,
   motionFx: defaultMotionFx,
+  stencil: defaultStencil,
   source: defaultSource,
   quality: 'css',
 };
@@ -285,6 +308,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     weave?: Partial<WeaveSettings>;
     zoom?: Partial<ZoomSettings>;
     motionFx?: Partial<MotionFxSettings>;
+    stencil?: Partial<StencilSettings>;
     source?: MotionSource;
     quality?: GlassQuality;
   };
@@ -297,6 +321,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     weave: { ...defaultWeave, ...p.weave },
     zoom: { ...defaultZoom, ...p.zoom },
     motionFx: { ...defaultMotionFx, ...p.motionFx },
+    stencil: { ...defaultStencil, ...p.stencil },
     source: p.source ?? defaultSource,
     quality: p.quality === 'hq' ? 'hq' : 'css',
   };

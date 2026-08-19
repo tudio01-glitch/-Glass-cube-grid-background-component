@@ -53,6 +53,12 @@
     "gyro": "auto",
     "tapPulse": "on"
   },
+  "stencil": {
+    "shape": "off",
+    "mask": null,
+    "scale": 92,
+    "invert": false
+  },
   "source": {
     "kind": "shapes",
     "preset": {

@@ -209,6 +209,11 @@
   animation: none;
 }
 
+/* stencil void: the cell exists in the grid but carries no glass or motion */
+.ggb-tile-void {
+  animation: none !important;
+}
+
 .ggb-tile-glass {
   position: absolute;
   inset: 0;

@@ -17,11 +17,14 @@ import type {
   PointerTiltSettings,
   ReliefSettings,
   ShapesPreset,
+  StencilSettings,
   TileSettings,
   TiltSettings,
   WeaveSettings,
   ZoomSettings,
 } from '../component/glass/tokens';
+import { STENCIL_IDS, drawStencil, rasterizeImageToMask } from '../component/glass/stencils';
+import type { StencilId } from '../component/glass/stencils';
 import { parse3dFileToHeightmap } from './parse3d';
 import { gradientGallery } from './gradientGallery';
 import {
@@ -135,6 +138,10 @@ export function Panel(props: PanelProps) {
           ]}
           onChange={(v) => onChange({ ...preset, quality: v })}
         />
+      </Group>
+
+      <Group title="פריסה">
+        <StencilControls {...props} />
       </Group>
 
       <Group title="הבלטה">
@@ -493,6 +500,147 @@ function ExportControls({ preset, showSample }: { preset: GlassGridPreset; showS
         <p className="lab-note" role="status">
           {status}
         </p>
+      )}
+    </>
+  );
+}
+
+/* ---- stencil layout: tiles form a shape ---- */
+
+const STENCIL_LABELS: Record<StencilId, string> = {
+  heart: 'לב',
+  wifi: 'וויפיי',
+  house: 'בית',
+  iphone: 'אייפון',
+  star: 'כוכב',
+  bolt: 'ברק',
+  music: 'תו',
+  bubble: 'צ׳אט',
+  play: 'נגן',
+  diamond: 'יהלום',
+  moon: 'ירח',
+  sun: 'שמש',
+  cloud: 'ענן',
+  drop: 'טיפה',
+  leaf: 'עלה',
+  eye: 'עין',
+  infinity: 'אינסוף',
+  shield: 'מגן',
+  plus: 'פלוס',
+};
+
+function StencilThumb({ id }: { id: StencilId }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#e8ecff';
+    ctx.strokeStyle = '#e8ecff';
+    drawStencil(id, ctx, canvas.width);
+  }, [id]);
+  return <canvas ref={ref} width={34} height={34} aria-hidden="true" />;
+}
+
+function StencilControls({ preset, onChange }: PanelProps) {
+  const st = preset.stencil;
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const patchStencil = (patch: Partial<StencilSettings>) =>
+    onChange({ ...preset, stencil: { ...st, ...patch } });
+
+  const loadIcon = (file: File) => {
+    setFileError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        patchStencil({ shape: 'custom', mask: rasterizeImageToMask(img), fileName: file.name });
+      };
+      img.onerror = () => setFileError('האייקון לא נטען — נתמכים SVG ו‑PNG');
+      img.src = String(reader.result);
+    };
+    reader.onerror = () => setFileError('קריאת הקובץ נעצרה — כדאי לנסות שוב');
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <>
+      <div className="lab-stencils">
+        <button
+          type="button"
+          className="lab-stencil-card"
+          aria-pressed={st.shape === 'off'}
+          onClick={() => patchStencil({ shape: 'off' })}
+        >
+          <span className="lab-stencil-full" aria-hidden="true" />
+          <span>מלא</span>
+        </button>
+        {STENCIL_IDS.map((id) => (
+          <button
+            key={id}
+            type="button"
+            className="lab-stencil-card"
+            aria-pressed={st.shape === id}
+            onClick={() => patchStencil({ shape: id })}
+          >
+            <StencilThumb id={id} />
+            <span>{STENCIL_LABELS[id]}</span>
+          </button>
+        ))}
+      </div>
+      <div className="lab-actions">
+        <button
+          type="button"
+          className="lab-button"
+          aria-pressed={st.shape === 'custom'}
+          onClick={() => fileRef.current?.click()}
+        >
+          לטעון אייקון (SVG / PNG)
+        </button>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".svg,.png,image/svg+xml,image/png"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) loadIcon(file);
+          e.target.value = '';
+        }}
+      />
+      {fileError && (
+        <p className="lab-note lab-note-warning" role="alert">
+          {fileError}
+        </p>
+      )}
+      {st.shape === 'custom' && st.fileName && (
+        <p className="lab-note" role="status">
+          הפריסה נבנית מהאייקון: {st.fileName}
+        </p>
+      )}
+      {st.shape !== 'off' && (
+        <>
+          <Slider
+            label="קנה מידה"
+            min={20}
+            max={100}
+            value={st.scale}
+            unit="%"
+            onChange={(v) => patchStencil({ scale: v })}
+          />
+          <CheckboxField
+            label="היפוך"
+            checked={st.invert}
+            onChange={(invert) => patchStencil({ invert })}
+          />
+          <p className="lab-note" role="note">
+            לפריסה חדה יותר כדאי אריחים קטנים — סביב 24–32px
+          </p>
+        </>
       )}
     </>
   );

@@ -181,6 +181,18 @@ Darkroom `satus` parallax depths, GSAP velocity-skew clamps):
 All of it is disabled under `prefers-reduced-motion` — binary, no reduced-amplitude
 compromise.
 
+### Stencil layouts (`stencil`)
+
+The tiles can form a shape's silhouette instead of a full rectangle: cells outside
+the shape keep their grid slot but render no glass, so the icon floats over the
+animated background. 19 built-ins (`heart`, `wifi`, `house`, `iphone`, `star`,
+`bolt`, `music`, `bubble`, `play`, `diamond`, `moon`, `sun`, `cloud`, `drop`,
+`leaf`, `eye`, `infinity`, `shield`, `plus`) plus `custom` — upload any SVG/PNG
+icon in the lab and its alpha silhouette is rasterized into the layout mask
+(serialized into the preset, so it travels through save/export). `scale` sizes
+the shape inside the grid and `invert` cuts the shape out of a full grid instead.
+Crisp silhouettes want small tiles (~24–32px).
+
 ### Pixel play & zoom
 
 Canvas backgrounds (shapes, gradients, gallery picks) accept a post-processing

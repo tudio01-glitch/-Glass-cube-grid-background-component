@@ -502,3 +502,50 @@ body {
   position: absolute;
   inset: 0;
 }
+
+/* stencil layout picker */
+.lab-stencils {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-block-end: 10px;
+}
+
+.lab-stencil-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 2px 5px;
+  border: 1px solid #2b3157;
+  border-radius: 10px;
+  background: #101226;
+  color: #c6cbe8;
+  font-family: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.lab-stencil-card:hover {
+  border-color: #8fb4ff;
+}
+
+.lab-stencil-card:focus-visible {
+  outline: 2px solid #8fb4ff;
+  outline-offset: 1px;
+}
+
+.lab-stencil-card[aria-pressed='true'] {
+  border-color: #f74a84;
+  box-shadow: 0 0 0 1px #f74a84 inset;
+  color: #fff;
+}
+
+.lab-stencil-full {
+  inline-size: 34px;
+  block-size: 34px;
+  border-radius: 6px;
+  background:
+    conic-gradient(#e8ecff 0 25%, transparent 0 50%, #e8ecff 0 75%, transparent 0) 0 0 / 16px 16px;
+  opacity: 0.8;
+}

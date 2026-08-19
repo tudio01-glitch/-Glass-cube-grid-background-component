@@ -145,6 +145,7 @@ export default function LabPage() {
               weave={preset.weave}
               zoom={preset.zoom}
               motionFx={preset.motionFx}
+              stencil={preset.stencil}
               source={preset.source}
               quality={preset.quality}
               className="lab-preview-ggb"
