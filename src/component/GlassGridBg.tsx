@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   MAX_TILES,
@@ -7,8 +7,9 @@ import {
   defaultTiles,
   tokensToStyle,
 } from './glass/tokens';
-import type { GlassGridBgProps, TileSettings } from './glass/tokens';
+import type { GlassGridBgProps, GlassQuality, TileSettings } from './glass/tokens';
 import { BackgroundLayer } from './layers/BackgroundLayer';
+import { GlassFilters, supportsHqGlass } from './glass/GlassFilters';
 import './GlassGridBg.css';
 
 export type GridLayout = {
@@ -60,6 +61,11 @@ export function GlassGridBg({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const [hqSupported] = useState(() => supportsHqGlass());
+  const filterId = `ggb-glass-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+
+  const effectiveQuality: GlassQuality = quality === 'hq' && hqSupported ? 'hq' : 'css';
+  const hqFallback = quality === 'hq' && !hqSupported;
 
   useEffect(() => {
     const el = rootRef.current;
@@ -88,9 +94,10 @@ export function GlassGridBg({
     gap: `${t.gap}px`,
     width: layout.cols * layout.tileSize + (layout.cols - 1) * t.gap,
     height: layout.rows * layout.tileSize + (layout.rows - 1) * t.gap,
+    filter: effectiveQuality === 'hq' ? `url(#${filterId})` : undefined,
   };
 
-  const classes = ['ggb', `ggb--q-${quality}`, `ggb-grid-fit-${t.fit}`];
+  const classes = ['ggb', `ggb--q-${effectiveQuality}`, `ggb-grid-fit-${t.fit}`];
   if (g.frost <= 0) classes.push('ggb--frost-0');
   if (className) classes.push(className);
 
@@ -99,12 +106,16 @@ export function GlassGridBg({
       ref={rootRef}
       className={classes.join(' ')}
       style={vars}
-      data-ggb-quality={quality}
+      data-ggb-quality={effectiveQuality}
+      data-ggb-hq-fallback={hqFallback || undefined}
       data-ggb-capped={layout.capped || undefined}
     >
       <div className="ggb-source">
         <BackgroundLayer source={src} />
       </div>
+      {effectiveQuality === 'hq' && (
+        <GlassFilters id={filterId} glass={g} tileSize={layout.tileSize} />
+      )}
       <div className="ggb-grid" style={gridStyle} aria-hidden="true">
         {Array.from({ length: layout.cols * layout.rows }, (_, i) => (
           <div key={i} className="ggb-tile" />

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { GlassGridBg, computeGridLayout } from '../component/GlassGridBg';
 import type { GlassGridPreset, Point } from '../component/glass/tokens';
 import { useReducedMotion } from '../component/layers/useReducedMotion';
+import { supportsHqGlass } from '../component/glass/GlassFilters';
 import defaultPresetJson from '../../presets/default.json';
 import { Panel, categoryOf, isClosedPath } from './Panel';
 import type { SourceTab } from './Panel';
@@ -77,6 +78,16 @@ export default function LabPage() {
         {reduced && (
           <p className="lab-note" role="status">
             מופעלת העדפת תנועה מופחתת — שכבת הרקע מוצגת כפריים קפוא
+          </p>
+        )}
+        {preset.quality === 'hq' && supportsHqGlass() && (
+          <p className="lab-note" role="status">
+            מצב HQ מפעיל פילטר SVG כבד יותר — מתאים לבדיקת איכות, פחות לעמוד עמוס
+          </p>
+        )}
+        {preset.quality === 'hq' && !supportsHqGlass() && (
+          <p className="lab-note lab-note-warning" role="status">
+            הדפדפן הזה מציג את מצב CSS — פילטר HQ נתמך חלקית בלבד
           </p>
         )}
         <div className="lab-preview-box" ref={previewRef}>
