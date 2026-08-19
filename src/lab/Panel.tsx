@@ -12,12 +12,14 @@ import type {
   GlassGridPreset,
   GlassSettings,
   MotionSource,
+  PixelEffect,
   PointerTiltSettings,
   ReliefSettings,
   ShapesPreset,
   TileSettings,
   TiltSettings,
   WeaveSettings,
+  ZoomSettings,
 } from '../component/glass/tokens';
 import { parse3dFileToHeightmap } from './parse3d';
 import { gradientGallery } from './gradientGallery';
@@ -85,8 +87,10 @@ export function Panel(props: PanelProps) {
     onChange({ ...preset, tilt: { ...preset.tilt, ...patch } });
   const patchPointerTilt = (patch: Partial<PointerTiltSettings>) =>
     onChange({ ...preset, pointerTilt: { ...preset.pointerTilt, ...patch } });
+  const patchZoom = (patch: Partial<ZoomSettings>) =>
+    onChange({ ...preset, zoom: { ...preset.zoom, ...patch } });
 
-  const { tiles, glass, tilt, pointerTilt } = preset;
+  const { tiles, glass, tilt, pointerTilt, zoom } = preset;
 
   return (
     <aside className="lab-panel" aria-label="הגדרות">
@@ -145,6 +149,26 @@ export function Panel(props: PanelProps) {
           value={tilt.perspective}
           unit="px"
           onChange={(v) => patchTilt({ perspective: v })}
+        />
+
+        <h4 className="lab-subtitle">זום</h4>
+        <Slider
+          label="זום אריחים"
+          min={0.5}
+          max={2}
+          step={0.05}
+          value={zoom.grid}
+          unit="×"
+          onChange={(v) => patchZoom({ grid: v })}
+        />
+        <Slider
+          label="זום רקע"
+          min={0.5}
+          max={3}
+          step={0.05}
+          value={zoom.source}
+          unit="×"
+          onChange={(v) => patchZoom({ source: v })}
         />
 
         <h4 className="lab-subtitle">תגובה לעכבר — tilt חי לכל הכיוונים</h4>
@@ -704,6 +728,58 @@ function ShapesControls({ preset, onChange, originPicking, onOriginPickingChange
           {originPicking ? 'לחיצה על התצוגה תקבע' : 'לקבוע בלחיצה על התצוגה'}
         </button>
       </div>
+
+      <h4 className="lab-subtitle">משחק פיקסלים</h4>
+      <PixelEffectControls
+        effect={shapes.effect}
+        onChange={(effect) => patchShapes({ effect })}
+      />
+    </>
+  );
+}
+
+function PixelEffectControls({
+  effect,
+  onChange,
+}: {
+  effect: PixelEffect | undefined;
+  onChange: (effect: PixelEffect) => void;
+}) {
+  const e: PixelEffect = effect ?? { type: 'off', intensity: 50, speed: 1 };
+  return (
+    <>
+      <SelectField
+        label="אפקט"
+        value={e.type}
+        options={[
+          { value: 'off', label: 'כבוי' },
+          { value: 'ripple', label: 'אדוות מים' },
+          { value: 'wind', label: 'רוח' },
+          { value: 'rain', label: 'פיקסלים נופלים' },
+          { value: 'mosaic', label: 'פיקסלים גסים' },
+          { value: 'glitch', label: 'גליץ׳' },
+        ]}
+        onChange={(type) => onChange({ ...e, type })}
+      />
+      {e.type !== 'off' && (
+        <>
+          <Slider
+            label="עוצמה"
+            min={0}
+            max={100}
+            value={e.intensity}
+            onChange={(intensity) => onChange({ ...e, intensity })}
+          />
+          <Slider
+            label="מהירות"
+            min={0.1}
+            max={3}
+            step={0.1}
+            value={e.speed}
+            onChange={(speed) => onChange({ ...e, speed })}
+          />
+        </>
+      )}
     </>
   );
 }

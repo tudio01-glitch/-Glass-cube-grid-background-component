@@ -109,6 +109,7 @@ export default function LabPage() {
             pointerTilt={preset.pointerTilt}
             relief={preset.relief}
             weave={preset.weave}
+            zoom={preset.zoom}
             source={preset.source}
             quality={preset.quality}
             className="lab-preview-ggb"

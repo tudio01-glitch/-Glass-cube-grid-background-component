@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { ShapesPreset } from '../../glass/tokens';
+import type { PixelEffect, ShapesPreset } from '../../glass/tokens';
 import { useReducedMotion } from '../useReducedMotion';
 
 const BASE_CYCLE_S = 10; // speed 1 = 10s cycle
@@ -373,6 +373,133 @@ function renderShapes(
   (renderers[p.shape] ?? renderSine)(ctx, w, h, pad, p, t);
 }
 
+/* ---- pixel play: post-processing on the rendered scene ---- */
+
+type EffectState = {
+  cols: { off: Float32Array; v: Float32Array; colW: number } | null;
+  tiny: HTMLCanvasElement | null;
+};
+
+/** Cheap deterministic pseudo-random from a seed. */
+function rnd(seed: number): number {
+  const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/**
+ * Applies the pixel effect from `buf` (the rendered scene) onto `ctx`.
+ * Works in device pixels; slice-based drawImage keeps it GPU-friendly.
+ */
+function applyPixelEffect(
+  ctx: CanvasRenderingContext2D,
+  buf: HTMLCanvasElement,
+  e: PixelEffect,
+  t: number,
+  dt: number,
+  state: EffectState,
+) {
+  const W = buf.width;
+  const H = buf.height;
+  const k = e.intensity / 100;
+  const s = e.speed;
+  switch (e.type) {
+    case 'ripple': {
+      // water surface: rows displaced by a travelling sine
+      ctx.drawImage(buf, 0, 0);
+      const amp = k * H * 0.035;
+      const lam = H / 14;
+      const step = Math.max(2, Math.round(H / 320));
+      for (let y = 0; y < H; y += step) {
+        const dx =
+          Math.sin(y / lam - t * 2.2 * s) *
+          amp *
+          (0.65 + 0.35 * Math.sin(t * 0.7 * s + (y / H) * 3.1));
+        ctx.drawImage(buf, 0, y, W, step, dx, y, W, step);
+      }
+      break;
+    }
+    case 'wind': {
+      // gusts: turbulent per-row drift plus a faint streak echo
+      ctx.drawImage(buf, 0, 0);
+      const amp = k * W * 0.06;
+      const gust = 0.55 + 0.45 * Math.sin(t * 0.9 * s);
+      const step = Math.max(2, Math.round(H / 280));
+      for (let y = 0; y < H; y += step) {
+        const dx =
+          (Math.sin(y / 29 + t * 1.3 * s) + 0.5 * Math.sin(y / 7 - t * 2.1 * s)) * amp * gust;
+        ctx.drawImage(buf, 0, y, W, step, dx, y, W, step);
+      }
+      ctx.globalAlpha = 0.18 * k;
+      ctx.drawImage(buf, amp * gust * 1.6, 0);
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'rain': {
+      // falling pixels: a share of the columns slides down and wraps
+      const colW = Math.max(4, Math.round(W / 90));
+      const n = Math.ceil(W / colW);
+      if (!state.cols || state.cols.colW !== colW || state.cols.off.length !== n) {
+        const off = new Float32Array(n);
+        const v = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+          off[i] = rnd(i * 3.7) * H;
+          v[i] = (40 + rnd(i * 9.1) * 160) * (H / 900 + 0.5);
+        }
+        state.cols = { off, v, colW };
+      }
+      const { off, v } = state.cols;
+      for (let i = 0; i < n; i++) {
+        const falls = rnd(i * 1.3) < k;
+        if (falls) off[i] = (off[i] + v[i] * s * dt) % H;
+        const x = i * colW;
+        const o = falls ? Math.round(off[i]) : 0;
+        if (o <= 0) {
+          ctx.drawImage(buf, x, 0, colW, H, x, 0, colW, H);
+        } else {
+          ctx.drawImage(buf, x, 0, colW, H - o, x, o, colW, H - o);
+          ctx.drawImage(buf, x, H - o, colW, o, x, 0, colW, o);
+        }
+      }
+      break;
+    }
+    case 'mosaic': {
+      // coarse pixels: downscale then upscale with smoothing off
+      const block = Math.max(2, (2 + k * 26) * (1 + 0.15 * Math.sin(t * s * 1.5)));
+      const tw = Math.max(1, Math.round(W / block));
+      const th = Math.max(1, Math.round(H / block));
+      if (!state.tiny) state.tiny = document.createElement('canvas');
+      const tiny = state.tiny;
+      if (tiny.width !== tw || tiny.height !== th) {
+        tiny.width = tw;
+        tiny.height = th;
+      }
+      const tctx = tiny.getContext('2d');
+      if (!tctx) break;
+      tctx.drawImage(buf, 0, 0, tw, th);
+      const smooth = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(tiny, 0, 0, W, H);
+      ctx.imageSmoothingEnabled = smooth;
+      break;
+    }
+    case 'glitch': {
+      // occasional horizontal slice jumps, re-seeded a few times a second
+      ctx.drawImage(buf, 0, 0);
+      const q = Math.floor(t * s * 7);
+      const slices = Math.round(2 + k * 10);
+      for (let i = 0; i < slices; i++) {
+        const y = rnd(q * 13.7 + i * 5.3) * H;
+        const hS = (0.01 + rnd(q * 7.9 + i * 2.1) * 0.06) * H;
+        const dx = (rnd(q * 3.3 + i * 8.7) - 0.5) * k * W * 0.22;
+        ctx.drawImage(buf, 0, y, W, hS, dx, y, W, hS);
+      }
+      break;
+    }
+    default:
+      ctx.drawImage(buf, 0, 0);
+  }
+}
+
 /** Built-in animated shapes on a rAF-driven canvas. */
 export function ShapesSource({ preset }: { preset: ShapesPreset }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -393,10 +520,39 @@ export function ShapesSource({ preset }: { preset: ShapesPreset }) {
     let w = 0;
     let h = 0;
 
+    // pixel-play pipeline: scene renders into a buffer, effect composites it
+    const fxCfg = p.effect && p.effect.type !== 'off' ? p.effect : null;
+    const fxState: EffectState = { cols: null, tiny: null };
+    let buf: HTMLCanvasElement | null = null;
+    let bufCtx: CanvasRenderingContext2D | null = null;
+
     const drawFrame = (dt: number) => {
       if (w < 2 || h < 2) return;
       timeRef.current += dt * p.speed;
-      renderShapes(ctx, w, h, pad, p, timeRef.current);
+      const t = timeRef.current;
+      if (!fxCfg) {
+        renderShapes(ctx, w, h, pad, p, t);
+        return;
+      }
+      if (!buf) {
+        buf = document.createElement('canvas');
+        bufCtx = buf.getContext('2d');
+      }
+      if (!bufCtx) {
+        renderShapes(ctx, w, h, pad, p, t);
+        return;
+      }
+      if (buf.width !== canvas.width || buf.height !== canvas.height) {
+        buf.width = canvas.width;
+        buf.height = canvas.height;
+        fxState.cols = null;
+      }
+      bufCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      renderShapes(bufCtx, w, h, pad, p, t);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      applyPixelEffect(ctx, buf, fxCfg, t, dt * p.speed, fxState);
+      ctx.restore();
     };
 
     const ro = new ResizeObserver(() => {

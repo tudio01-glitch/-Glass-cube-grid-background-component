@@ -8,6 +8,7 @@ import {
   defaultSource,
   defaultTilt,
   defaultWeave,
+  defaultZoom,
   normalizeTiles,
   tokensToStyle,
 } from './glass/tokens';
@@ -90,6 +91,7 @@ export function GlassGridBg({
   pointerTilt,
   relief,
   weave,
+  zoom,
   source,
   quality = 'css',
   className,
@@ -101,6 +103,7 @@ export function GlassGridBg({
   const pt = { ...defaultPointerTilt, ...pointerTilt };
   const rl = { ...defaultRelief, ...relief };
   const wv = { ...defaultWeave, ...weave };
+  const zm = { ...defaultZoom, ...zoom };
   const src = source ?? defaultSource;
   const reduced = useReducedMotion();
 
@@ -131,7 +134,7 @@ export function GlassGridBg({
     [box.w, box.h, t.size, t.gapX, t.gapY, t.inset, t.fit],
   );
 
-  const vars = tokensToStyle(t, g, tl, src, rl, wv, pt);
+  const vars = tokensToStyle(t, g, tl, src, rl, wv, pt, zm);
 
   /*
    * Pointer tilt. 'tiles': every tile rotates toward the cursor with a
@@ -173,8 +176,11 @@ export function GlassGridBg({
         return;
       }
       const r = root.getBoundingClientRect();
-      const px = cursor.x - r.left;
-      const py = cursor.y - r.top;
+      // grid zoom scales tile screen positions around the center — map the
+      // cursor into unscaled grid coordinates so targeting stays exact
+      const zg = Math.max(0.05, zm.grid);
+      const px = r.width / 2 + (cursor.x - r.left - r.width / 2) / zg;
+      const py = r.height / 2 + (cursor.y - r.top - r.height / 2) / zg;
       const gridW = layout.cols * layout.tileSize + (layout.cols - 1) * t.gapX;
       const gridH = layout.rows * layout.tileSize + (layout.rows - 1) * t.gapY;
       const originX = t.fit === 'fixed' ? t.inset : (r.width - gridW) / 2;
@@ -218,7 +224,7 @@ export function GlassGridBg({
       root.style.removeProperty('--ggb-ptr-y');
     };
      
-  }, [pt.mode, pt.strength, pt.radius, reduced, layout, t.gapX, t.gapY, t.inset, t.fit]);
+  }, [pt.mode, pt.strength, pt.radius, reduced, layout, t.gapX, t.gapY, t.inset, t.fit, zm.grid]);
 
   const weaveActive = wv.mode !== 'off';
   const tileHeights = useMemo(() => {

@@ -21,6 +21,12 @@ export type TiltSettings = {
   perspective: number; // px. default 900
 };
 
+/** Visual zoom of the two layers, as scale factors. */
+export type ZoomSettings = {
+  grid: number; // glass tile layer, 0.5-2. default 1
+  source: number; // background canvas layer, 0.5-3. default 1
+};
+
 /**
  * Pointer-driven tilt: the cursor tips tiles in every direction.
  * 'tiles' rotates each tile toward the cursor with a distance falloff;
@@ -81,6 +87,13 @@ export type ShapeKind =
   | 'grad-stripes' // diagonal color bands scrolling
   | 'grad-silk'; // translucent sweeps interfering like silk
 
+/** Post-processing pixel play applied to canvas-rendered backgrounds. */
+export type PixelEffect = {
+  type: 'off' | 'ripple' | 'wind' | 'rain' | 'mosaic' | 'glitch';
+  intensity: number; // 0-100
+  speed: number; // 0.1-3
+};
+
 export type ShapesPreset = {
   shape: ShapeKind;
   colors: string[]; // 1-4 colors, default Bezeq palette
@@ -89,6 +102,7 @@ export type ShapesPreset = {
   speed: number; // 0.1-3, 1 = 10s cycle
   blur: number; // px, softness of the shape itself
   origin: Point; // 0-1
+  effect?: PixelEffect; // pixel play on top of the rendered scene
 };
 
 export type DrawMotion =
@@ -111,6 +125,7 @@ export type GlassGridBgProps = {
   pointerTilt?: Partial<PointerTiltSettings>; // cursor-driven tilt
   relief?: Partial<ReliefSettings>; // per-tile bump
   weave?: Partial<WeaveSettings>; // global relief across all tiles
+  zoom?: Partial<ZoomSettings>; // visual zoom of grid / background layers
   source?: MotionSource; // what moves behind the glass
   quality?: GlassQuality; // hq = SVG displacement filters (refraction/dispersion)
   className?: string;
@@ -125,6 +140,7 @@ export type GlassGridPreset = {
   pointerTilt: PointerTiltSettings;
   relief: ReliefSettings;
   weave: WeaveSettings;
+  zoom: ZoomSettings;
   source: MotionSource;
   quality: GlassQuality;
 };
@@ -153,6 +169,11 @@ export const defaultPointerTilt: PointerTiltSettings = {
   mode: 'tiles',
   strength: 55,
   radius: 45,
+};
+
+export const defaultZoom: ZoomSettings = {
+  grid: 1,
+  source: 1,
 };
 
 export const defaultRelief: ReliefSettings = {
@@ -217,6 +238,7 @@ export const defaultPreset: GlassGridPreset = {
   pointerTilt: defaultPointerTilt,
   relief: defaultRelief,
   weave: defaultWeave,
+  zoom: defaultZoom,
   source: defaultSource,
   quality: 'css',
 };
@@ -230,6 +252,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     pointerTilt?: Partial<PointerTiltSettings>;
     relief?: Partial<ReliefSettings>;
     weave?: Partial<WeaveSettings>;
+    zoom?: Partial<ZoomSettings>;
     source?: MotionSource;
     quality?: GlassQuality;
   };
@@ -240,6 +263,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     pointerTilt: { ...defaultPointerTilt, ...p.pointerTilt },
     relief: { ...defaultRelief, ...p.relief },
     weave: { ...defaultWeave, ...p.weave },
+    zoom: { ...defaultZoom, ...p.zoom },
     source: p.source ?? defaultSource,
     quality: p.quality === 'hq' ? 'hq' : 'css',
   };
@@ -269,6 +293,7 @@ export function tokensToCssVars(
   relief: ReliefSettings = defaultRelief,
   weave: WeaveSettings = defaultWeave,
   pointerTilt: PointerTiltSettings = defaultPointerTilt,
+  zoom: ZoomSettings = defaultZoom,
 ): Record<string, string> {
   const colors =
     source.kind === 'shapes' && source.preset.colors.length > 0
@@ -294,6 +319,8 @@ export function tokensToCssVars(
     '--ggb-weave-height': String(weave.height),
     '--ggb-ptr-strength': String(pointerTilt.strength),
     '--ggb-ptr-radius': String(pointerTilt.radius),
+    '--ggb-grid-zoom': String(zoom.grid),
+    '--ggb-source-zoom': String(zoom.source),
     '--ggb-light-angle': String(glass.lightAngle),
     '--ggb-light-intensity': String(glass.lightIntensity),
     '--ggb-opacity': String(glass.opacity),
@@ -314,6 +341,16 @@ export function tokensToStyle(
   relief: ReliefSettings = defaultRelief,
   weave: WeaveSettings = defaultWeave,
   pointerTilt: PointerTiltSettings = defaultPointerTilt,
+  zoom: ZoomSettings = defaultZoom,
 ): CSSProperties {
-  return tokensToCssVars(tiles, glass, tilt, source, relief, weave, pointerTilt) as CSSProperties;
+  return tokensToCssVars(
+    tiles,
+    glass,
+    tilt,
+    source,
+    relief,
+    weave,
+    pointerTilt,
+    zoom,
+  ) as CSSProperties;
 }

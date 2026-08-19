@@ -30,6 +30,7 @@ createRoot(host!).render(
       pointerTilt={preset.pointerTilt}
       relief={preset.relief}
       weave={preset.weave}
+      zoom={preset.zoom}
       source={preset.source}
       quality={preset.quality}
       className={mountSelector ? 'ggb-embed' : 'ggb-standalone'}

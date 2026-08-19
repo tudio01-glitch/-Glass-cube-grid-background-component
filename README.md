@@ -103,6 +103,8 @@ Every token can be overridden per instance.
 | `--ggb-perspective` | `tilt.perspective` | `900px` |
 | `--ggb-ptr-strength` | `pointerTilt.strength` | `55` |
 | `--ggb-ptr-radius` | `pointerTilt.radius` | `45` (% of min side) |
+| `--ggb-grid-zoom` | `zoom.grid` | `1` (scale of the tile layer, 0.5–2) |
+| `--ggb-source-zoom` | `zoom.source` | `1` (scale of the background layer, 0.5–3) |
 | `--ggb-relief-area` | `relief.area` | `78` (% of tile the bump covers) |
 | `--ggb-relief-height` | `relief.height` | `55` (bump intensity) |
 | `--ggb-weave-height` | `weave.height` | `50` (global relief strength) |
@@ -146,6 +148,20 @@ sample texts/buttons only appear when the «להציג תוכן לדוגמה» t
 (with separate horizontal/vertical brick gaps), glass (including the light-angle dial and
 the CSS/HQ toggle), surface tilt + pointer tilt, background (tabs: shapes / gallery /
 upload / draw), export, presets (localStorage + Bezeq-default reset).
+
+### Pixel play & zoom
+
+Canvas backgrounds (shapes, gradients, gallery picks) accept a post-processing
+**pixel effect** (`preset.effect: { type, intensity, speed }`): `ripple` (water-surface
+row displacement), `wind` (turbulent drift with streaks), `rain` (columns of pixels
+falling and wrapping), `mosaic` (animated coarse pixels) and `glitch` (slice jumps).
+The scene renders into an offscreen buffer and the effect composites it with
+slice-based `drawImage` — GPU-friendly, no per-pixel loops.
+
+Two **zoom** controls scale the layers independently: `zoom.grid` grows/shrinks the
+glass cubes as one layer and `zoom.source` zooms the background canvas in and out
+(zooming out reveals the palette ground). Pointer-tilt targeting compensates for
+grid zoom automatically.
 
 The **gallery tab** holds a curated collection of animated gradient backgrounds
 (15 ready-made cards — rotating sweeps, conic swirls, liquid mesh, aurora curtains,

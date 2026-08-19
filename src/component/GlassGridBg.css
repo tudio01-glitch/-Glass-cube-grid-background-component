@@ -20,6 +20,8 @@
   --ggb-weave-height: 50;
   --ggb-ptr-strength: 55;
   --ggb-ptr-radius: 45;
+  --ggb-grid-zoom: 1;
+  --ggb-source-zoom: 1;
   /* live cursor position (-1..1), written by the pointer-tilt loop */
   --ggb-ptr-x: 0;
   --ggb-ptr-y: 0;
@@ -77,12 +79,18 @@
   );
 }
 
-/* 1. motion layer */
+/* 1. motion layer — zoomable; the surface behind it keeps the ground color
+   so zooming out reveals the palette ground, not the page */
+.ggb-surface {
+  background: var(--ggb-color-4);
+}
+
 .ggb-source {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--ggb-color-4);
+  scale: var(--ggb-source-zoom);
+  transform-origin: 50% 50%;
 }
 
 .ggb-source > * {
@@ -93,12 +101,14 @@
   object-fit: cover;
 }
 
-/* 2. glass tile grid */
+/* 2. glass tile grid — zoomable as one layer */
 .ggb-grid {
   position: absolute;
   z-index: 1;
   pointer-events: none;
   display: grid;
+  scale: var(--ggb-grid-zoom);
+  transform-origin: 50% 50%;
 }
 
 .ggb-grid-fit-cover .ggb-grid,

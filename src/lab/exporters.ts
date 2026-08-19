@@ -3,7 +3,16 @@ import type { GlassGridPreset } from '../component/glass/tokens';
 
 /** CSS custom-property block for the current state, ready to paste. */
 export function formatCssTokens(preset: GlassGridPreset): string {
-  const vars = tokensToCssVars(preset.tiles, preset.glass, preset.tilt, preset.source);
+  const vars = tokensToCssVars(
+    preset.tiles,
+    preset.glass,
+    preset.tilt,
+    preset.source,
+    preset.relief,
+    preset.weave,
+    preset.pointerTilt,
+    preset.zoom,
+  );
   const lines = Object.entries(vars).map(([k, v]) => `  ${k}: ${v};`);
   return `.ggb {\n${lines.join('\n')}\n}\n`;
 }
