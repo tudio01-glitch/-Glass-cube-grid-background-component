@@ -37,13 +37,16 @@ export type GridLayout = {
 /**
  * Tile count follows the container: count = container size / (tile + gap),
  * rounded up for 'cover' (partial tiles clipped at the edges) and down for
- * 'contain' / 'fixed'. Above MAX_TILES the tile size is scaled up instead.
+ * 'contain' / 'fixed'. Above the `tiles.maxTiles` budget (clamped to the
+ * MAX_TILES safety ceiling) the tile size is scaled up instead — raise the
+ * budget for fine grids that pixelate stencil shapes.
  */
 export function computeGridLayout(
   width: number,
   height: number,
   tiles: TileSettings,
 ): GridLayout {
+  const cap = Math.min(MAX_TILES, Math.max(50, tiles.maxTiles));
   const innerW = Math.max(0, width - 2 * tiles.inset);
   const innerH = Math.max(0, height - 2 * tiles.inset);
   const round = tiles.fit === 'cover' ? Math.ceil : Math.floor;
@@ -51,12 +54,12 @@ export function computeGridLayout(
     cols: Math.max(1, round((innerW + tiles.gapX) / (size + tiles.gapX))),
     rows: Math.max(1, round((innerH + tiles.gapY) / (size + tiles.gapY))),
   });
-  let tileSize = Math.max(8, tiles.size);
+  let tileSize = Math.max(6, tiles.size);
   let { cols, rows } = countFor(tileSize);
   let capped = false;
-  for (let i = 0; cols * rows > MAX_TILES && i < 10; i++) {
+  for (let i = 0; cols * rows > cap && i < 10; i++) {
     capped = true;
-    tileSize = tileSize * Math.sqrt((cols * rows) / MAX_TILES) * 1.02;
+    tileSize = tileSize * Math.sqrt((cols * rows) / cap) * 1.02;
     ({ cols, rows } = countFor(tileSize));
   }
   return { cols, rows, tileSize, capped };
@@ -211,7 +214,7 @@ export function GlassGridBg({
   const layout = useMemo(
     () => computeGridLayout(box.w, box.h, t),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [box.w, box.h, t.size, t.gapX, t.gapY, t.inset, t.fit],
+    [box.w, box.h, t.size, t.gapX, t.gapY, t.inset, t.fit, t.maxTiles],
   );
 
   const vars = tokensToStyle(t, g, tl, src, rl, wv, pt, zm, mfx, tb);
@@ -237,10 +240,24 @@ export function GlassGridBg({
       pointerOn && mfx.gyro === 'auto' && window.matchMedia('(pointer: coarse)').matches;
     if (!root || !grid || reduced || offscreen || !pointerOn) return;
     let raf = 0;
-    // input in raw root-local px (pointer) or normalized axes (gyro);
-    // the tiles branch maps both into grid-zoom-corrected space in one place
-    let input: { kind: 'pointer'; x: number; y: number } | { kind: 'gyro'; nx: number; ny: number } | null = null;
-    let waves: { x: number; y: number; t0: number }[] = [];
+    // input in raw client px (pointer) or normalized axes (gyro); event
+    // handlers never measure the DOM — apply() converts everything against
+    // ONE getBoundingClientRect per frame, so a frame's style writes are
+    // never force-flushed by the next pointer event (layout-thrash killer)
+    let input: { kind: 'pointer'; cx: number; cy: number } | { kind: 'gyro'; nx: number; ny: number } | null = null;
+    let waves: { x: number; y: number; t0: number }[] = []; // root-local, zoom-corrected
+    let pendingTaps: { cx: number; cy: number; t0: number }[] = []; // client px
+    // indices that carry live tilt vars — DOM writes stay proportional to the
+    // influence circle, not the grid size, so pixel-dense grids stay cheap
+    let active = new Set<number>();
+    // last written values: sub-deadband deltas skip the DOM entirely, cutting
+    // style recalcs to the tiles that visibly moved this frame. Denser grids
+    // get a coarser deadband — faint far-from-cursor tilts update sparsely,
+    // concentrating the per-frame budget near the pointer.
+    let lastRx = new Float32Array(0);
+    let lastRy = new Float32Array(0);
+    const tileCount = layout.cols * layout.rows;
+    const DEADBAND = tileCount > 1500 ? 0.6 : tileCount > 600 ? 0.4 : 0.25; // deg
     let baseBeta: number | null = null;
     let lastPointerTs = 0;
 
@@ -258,6 +275,9 @@ export function GlassGridBg({
         el.style.removeProperty('--ggb-ptr-rx');
         el.style.removeProperty('--ggb-ptr-ry');
       }
+      active.clear();
+      lastRx.fill(0);
+      lastRy.fill(0);
     };
 
     const apply = () => {
@@ -269,8 +289,8 @@ export function GlassGridBg({
         let nx = 0;
         let ny = 0;
         if (input?.kind === 'pointer') {
-          nx = (input.x / r.width) * 2 - 1;
-          ny = (input.y / r.height) * 2 - 1;
+          nx = ((input.cx - r.left) / r.width) * 2 - 1;
+          ny = ((input.cy - r.top) / r.height) * 2 - 1;
         } else if (input?.kind === 'gyro') {
           nx = input.nx;
           ny = input.ny;
@@ -287,11 +307,20 @@ export function GlassGridBg({
       const maxDeg = (pt.strength / 100) * 28;
       const bandW = radiusPx * 0.45;
       const waveSpeed = maxDim * 1.1; // px/s — one sweep across in ~0.9s
+      // tap origins arrive in client px; adopt them into zoom-corrected
+      // root-local space here, against this frame's single measurement
+      for (const tap of pendingTaps) {
+        waves.push({
+          ...zoomCorrect(r.width, r.height, tap.cx - r.left, tap.cy - r.top),
+          t0: tap.t0,
+        });
+      }
+      pendingTaps = [];
       waves = waves.filter((w) => ((now - w.t0) / 1000) * waveSpeed < maxDim + 4 * bandW);
 
       let cursorPt: { x: number; y: number } | null = null;
       if (input?.kind === 'pointer') {
-        cursorPt = zoomCorrect(r.width, r.height, input.x, input.y);
+        cursorPt = zoomCorrect(r.width, r.height, input.cx - r.left, input.cy - r.top);
       } else if (input?.kind === 'gyro') {
         cursorPt = zoomCorrect(
           r.width,
@@ -311,6 +340,11 @@ export function GlassGridBg({
       const originX = t.fit === 'fixed' ? t.inset : (r.width - gridW) / 2;
       const originY = t.fit === 'fixed' ? t.inset : (r.height - gridH) / 2;
       const children = grid.children;
+      if (lastRx.length !== children.length) {
+        lastRx = new Float32Array(children.length);
+        lastRy = new Float32Array(children.length);
+      }
+      const next = new Set<number>();
       for (let i = 0; i < children.length; i++) {
         const col = i % layout.cols;
         const row = (i / layout.cols) | 0;
@@ -336,10 +370,34 @@ export function GlassGridBg({
           rx += (wdy / d) * a;
           ry += (-wdx / d) * a;
         }
-        const el = children[i] as HTMLElement;
-        el.style.setProperty('--ggb-ptr-rx', rx.toFixed(2));
-        el.style.setProperty('--ggb-ptr-ry', ry.toFixed(2));
+        // only tiles inside the influence circle / wave band get DOM writes
+        if (Math.abs(rx) + Math.abs(ry) > 0.01) {
+          next.add(i);
+          // sub-deadband change: keep the previous written value, skip the DOM
+          if (
+            Math.abs(rx - lastRx[i]) > DEADBAND ||
+            Math.abs(ry - lastRy[i]) > DEADBAND
+          ) {
+            const el = children[i] as HTMLElement;
+            el.style.setProperty('--ggb-ptr-rx', rx.toFixed(2));
+            el.style.setProperty('--ggb-ptr-ry', ry.toFixed(2));
+            lastRx[i] = rx;
+            lastRy[i] = ry;
+          }
+        }
       }
+      for (const i of active) {
+        if (!next.has(i)) {
+          const el = children[i] as HTMLElement | undefined;
+          if (el) {
+            el.style.removeProperty('--ggb-ptr-rx');
+            el.style.removeProperty('--ggb-ptr-ry');
+          }
+          lastRx[i] = 0;
+          lastRy[i] = 0;
+        }
+      }
+      active = next;
       if (waves.length > 0) schedule(); // waves animate on their own clock
     };
 
@@ -347,20 +405,16 @@ export function GlassGridBg({
       if (!raf) raf = requestAnimationFrame(apply);
     };
     const onMove = (e: PointerEvent) => {
-      const r = root.getBoundingClientRect();
       lastPointerTs = performance.now();
-      input = { kind: 'pointer', x: e.clientX - r.left, y: e.clientY - r.top };
+      input = { kind: 'pointer', cx: e.clientX, cy: e.clientY };
       schedule();
     };
     const onDown = (e: PointerEvent) => {
-      const r = root.getBoundingClientRect();
       lastPointerTs = performance.now();
-      const raw = { x: e.clientX - r.left, y: e.clientY - r.top };
       if (wavesOn) {
-        // wave origins live in grid-zoom-corrected space, like tile centers
-        waves.push({ ...zoomCorrect(r.width, r.height, raw.x, raw.y), t0: performance.now() });
+        pendingTaps.push({ cx: e.clientX, cy: e.clientY, t0: performance.now() });
       }
-      input = { kind: 'pointer', ...raw };
+      input = { kind: 'pointer', cx: e.clientX, cy: e.clientY };
       schedule();
     };
     const onUp = (e: PointerEvent) => {
@@ -604,7 +658,8 @@ export function GlassGridBg({
   if (mfx.parallax === 'on' && !reduced) classes.push('ggb--parallax');
   if (offscreen) classes.push('ggb--offscreen');
   // adaptive quality: per-tile float is compositor-cheap, but not at any count
-  if (layout.cols * layout.rows > 250) classes.push('ggb--dense');
+  // (the budget matches the dense default — a phone-sized grid stays floating)
+  if (layout.cols * layout.rows > 600) classes.push('ggb--dense');
   if (className) classes.push(className);
 
   const floatActive = mfx.float !== 'off' && !reduced;

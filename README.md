@@ -28,7 +28,7 @@ Other scripts: `npm run typecheck`, `npm run lint`, `npm run build`,
 import { GlassGridBg } from './src/component/GlassGridBg';
 
 <GlassGridBg
-  tiles={{ size: 64, gapX: 6, gapY: 6, radius: 10 }} // `gap` still works as a shorthand for both axes
+  tiles={{ size: 28, gap: 4, radius: 8, maxTiles: 2000 }} // `gap` sets both axes; gapX/gapY split them
   glass={{ refraction: 100, dispersion: 100, depth: 100, frost: 0, splay: 100 }}
   tilt={{ x: 18, y: -12, perspective: 900 }} // 3D tilt of the whole glass surface
   pointerTilt={{ mode: 'tiles', strength: 55, radius: 45 }} // cursor-driven tilt
@@ -56,15 +56,20 @@ import { GlassGridBg } from './src/component/GlassGridBg';
 ```
 
 The wrapper is `position: relative` and fills whatever container you give it; tile count
-follows the container size via `ResizeObserver` (capped at 400 tiles — above that the tile
-size scales up automatically and the wrapper gets `data-ggb-capped`).
+follows the container size via `ResizeObserver`. Tiles default to a dense, uniform grid
+(28px cubes, 4px gap on both axes). `tiles.maxTiles` sets the tile-count budget
+(default 2000, hard ceiling 6000) — above it the tile size scales up automatically and
+the wrapper gets `data-ggb-capped`; raise the budget with small tiles (10–14px) for a
+fine pixelization look, which is especially striking on stencil shapes. The interaction
+loop only writes to tiles inside the pointer's influence circle (with a density-scaled
+deadband), so pointer cost doesn't grow with the count.
 
 ### Motion sources
 
 | kind     | payload                                                | notes                                  |
 | -------- | ------------------------------------------------------ | -------------------------------------- |
 | `shapes` | `preset: { shape, colors, size, count, speed, blur, origin }` | canvas shapes: `circle`, `ripple`, `sine`, `blob`, `orbit` — plus the animated gradient family: `grad-sweep`, `grad-conic`, `grad-mesh`, `grad-aurora`, `grad-pulse`, `grad-waves`, `grad-stripes`, `grad-silk` |
-| `media`  | `src, type: 'gif' \| 'video' \| 'svg', speed?`          | `<img>` for gif/svg, muted looping `<video>` for mp4/webm |
+| `media`  | `src, type: 'gif' \| 'video' \| 'svg' \| 'image', speed?` | `<img>` for gif/svg/static images (png/jpg/webp), muted looping `<video>` for mp4/webm |
 | `lottie` | `data: object \| string, speed?, loop?`                 | lottie-web, canvas renderer, lazy-loaded |
 | `draw`   | `path: Point[], stroke, color, motion`                  | motion: `path` / `pulse` / `drift`     |
 | `scene`  | `shape, colors, speed?, scale?`                         | shape-matched animated scene behind a stencil layout — a blinking eye with a wandering iris behind the `eye` layout, a beating heart behind `heart`, sequential arcs behind `wifi`… every built-in stencil has one |
@@ -86,10 +91,10 @@ Every token can be overridden per instance.
 
 | Token | Prop | Default |
 | ----- | ---- | ------- |
-| `--ggb-tile-size` | `tiles.size` | `64px` |
-| `--ggb-tile-gap-x` | `tiles.gapX` | `6px` |
-| `--ggb-tile-gap-y` | `tiles.gapY` | `6px` |
-| `--ggb-tile-radius` | `tiles.radius` | `10px` |
+| `--ggb-tile-size` | `tiles.size` | `28px` |
+| `--ggb-tile-gap-x` | `tiles.gapX` | `4px` |
+| `--ggb-tile-gap-y` | `tiles.gapY` | `4px` |
+| `--ggb-tile-radius` | `tiles.radius` | `8px` |
 | `--ggb-tile-inset` | `tiles.inset` | `0px` |
 | `--ggb-tile-border` | `tiles.border` | `1px` |
 | `--ggb-frost` | `glass.frost` | `0` (0–100 → blur 0–24px) |
@@ -167,9 +172,11 @@ depth 100, dispersion 100, frost 0, splay 100, light −45° / 80%, `sine` warp 
 
 Hebrew RTL panel over a resizable preview. The preview is a pure background by default —
 sample texts/buttons only appear when the «להציג תוכן לדוגמה» toggle is on. Groups: tiles
-(with separate horizontal/vertical brick gaps), glass (including the light-angle dial and
+(uniform spacing by default — «ריווח אחיד» unlinks into separate horizontal/vertical
+brick gaps — plus the tile-count budget), glass (including the light-angle dial and
 the CSS/HQ toggle), surface tilt + pointer tilt, background (tabs: shapes / gallery /
-upload / draw), export, presets (localStorage + Bezeq-default reset).
+upload / draw — the upload tab takes static background images png/jpg/webp alongside
+gif/svg/video/Lottie), export, presets (localStorage + Bezeq-default reset).
 
 ### Mobile & award-site motion (`motionFx`)
 
@@ -180,7 +187,8 @@ Darkroom `satus` parallax depths, GSAP velocity-skew clamps):
   coarse-pointer (touch) devices only, `'always'`/`'off'` override. Pure compositor
   keyframes (amplitude rides on `font-size` so keyframes stay `var()`-free), diagonal
   negative delays make it read as a wave, three duration buckets desynchronize
-  neighbours. Pauses offscreen; grids above 250 tiles skip it (adaptive quality).
+  neighbours. Pauses offscreen; grids above 600 tiles skip it (adaptive quality —
+  dense grids also drop the per-tile transition and sub-pixel shadow detail).
 - **Scroll parallax** — the source drifts against scroll while the glass counter-drifts
   (at depth 100: ±70px vs ∓25px), with automatic source zoom headroom, a Lenis-style
   time-corrected lerp (0.12/frame), and a scroll-velocity `skewY` on the source
@@ -209,7 +217,9 @@ animated background. 19 built-ins (`heart`, `wifi`, `house`, `iphone`, `star`,
 icon in the lab and its alpha silhouette is rasterized into the layout mask
 (serialized into the preset, so it travels through save/export). `scale` sizes
 the shape inside the grid and `invert` cuts the shape out of a full grid instead.
-Crisp silhouettes want small tiles (~24–32px).
+Crisp silhouettes want small tiles (~24–32px); for a true pixel-art look drop the
+tile size to 10–14px and raise `tiles.maxTiles` — the shape re-renders from
+hundreds of tiny cubes.
 
 Whenever a stencil is active the background is **cropped to the tiles**: a mask
 built from the visible cells themselves (one rounded rect per cube, expanded by

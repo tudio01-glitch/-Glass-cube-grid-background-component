@@ -1,13 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useReducedMotion } from '../useReducedMotion';
 
-type MediaProps = { src: string; type: 'gif' | 'video' | 'svg'; speed?: number };
+type MediaProps = { src: string; type: 'gif' | 'video' | 'svg' | 'image'; speed?: number };
 
-/** GIF / animated SVG via <img>, mp4/webm via <video>. Object-fit cover from CSS. */
+/** GIF / animated SVG / static image via <img>, mp4/webm via <video>. Object-fit cover from CSS. */
 export function MediaSource({ src, type, speed = 1 }: MediaProps) {
   if (type === 'video') return <VideoMedia src={src} speed={speed} />;
   if (type === 'gif') return <GifMedia src={src} />;
-  // animated SVG: SMIL/CSS animations inside the file keep running on their own
+  // animated SVG (SMIL/CSS runs on its own) or a static image background
   return <img src={src} alt="" />;
 }
 

@@ -1,12 +1,13 @@
 {
   "tiles": {
-    "size": 64,
-    "gapX": 6,
-    "gapY": 6,
-    "radius": 10,
+    "size": 28,
+    "gapX": 4,
+    "gapY": 4,
+    "radius": 8,
     "inset": 0,
     "border": 1,
-    "fit": "cover"
+    "fit": "cover",
+    "maxTiles": 2000
   },
   "glass": {
     "frost": 0,

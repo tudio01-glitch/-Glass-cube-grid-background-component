@@ -3,13 +3,14 @@ import type { CSSProperties, ReactNode } from 'react';
 export type Point = { x: number; y: number };
 
 export type TileSettings = {
-  size: number; // px, square tile. default 64
-  gapX: number; // px, horizontal gap between bricks. default 6
-  gapY: number; // px, vertical gap between bricks. default 6
-  radius: number; // px. default 10
+  size: number; // px, square tile. default 28
+  gapX: number; // px, horizontal gap between bricks. default 4
+  gapY: number; // px, vertical gap between bricks. default 4
+  radius: number; // px. default 8
   inset: number; // px padding of the grid inside the container. default 0
   border: number; // px, tile edge stroke. default 1
   fit: 'cover' | 'contain' | 'fixed'; // how the grid fills the container. default cover
+  maxTiles: number; // tile-count budget before sizes scale up. default 2000
 };
 
 /** Prop input: `gap` is accepted as a legacy shorthand that sets both axes. */
@@ -165,7 +166,7 @@ export type DrawMotion =
 
 export type MotionSource =
   | { kind: 'shapes'; preset: ShapesPreset }
-  | { kind: 'media'; src: string; type: 'gif' | 'video' | 'svg'; speed?: number }
+  | { kind: 'media'; src: string; type: 'gif' | 'video' | 'svg' | 'image'; speed?: number }
   | { kind: 'lottie'; data: object | string; speed?: number; loop?: boolean }
   | { kind: 'draw'; path: Point[]; stroke: number; color: string; motion: DrawMotion }
   // a background scene that visually completes a stencil layout
@@ -209,16 +210,23 @@ export type GlassGridPreset = {
 
 export const BEZEQ_COLORS = ['#F74A84', '#2A73F0', '#52B9F0', '#0B0B33'];
 
-export const MAX_TILES = 400;
+/**
+ * Hard safety ceiling on the tile count — `tiles.maxTiles` picks the working
+ * budget below it (high budgets pixelate stencil shapes beautifully; the
+ * interaction loop only ever writes to tiles inside the influence radius, so
+ * pointer cost doesn't grow with the count).
+ */
+export const MAX_TILES = 6000;
 
 export const defaultTiles: TileSettings = {
-  size: 64,
-  gapX: 6,
-  gapY: 6,
-  radius: 10,
+  size: 28,
+  gapX: 4,
+  gapY: 4,
+  radius: 8,
   inset: 0,
   border: 1,
   fit: 'cover',
+  maxTiles: 2000,
 };
 
 export const defaultTilt: TiltSettings = {

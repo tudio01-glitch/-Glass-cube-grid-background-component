@@ -6,10 +6,10 @@
   isolation: isolate;
 
   /* tokens (defaults; props override inline) */
-  --ggb-tile-size: 64px;
-  --ggb-tile-gap-x: 6px;
-  --ggb-tile-gap-y: 6px;
-  --ggb-tile-radius: 10px;
+  --ggb-tile-size: 28px;
+  --ggb-tile-gap-x: 4px;
+  --ggb-tile-gap-y: 4px;
+  --ggb-tile-radius: 8px;
   --ggb-tile-inset: 0px;
   --ggb-tile-border: 1px;
   --ggb-tilt-x: 0;
@@ -198,6 +198,9 @@
 .ggb-tile {
   position: relative;
   border-radius: var(--ggb-tile-radius);
+  /* isolate per-tile style recalcs — box-shadows may paint outside, so no
+     paint containment here */
+  contain: layout style;
   /* float amplitude rides on font-size so the keyframes stay var()-free —
      var() inside keyframes forces per-frame style recalc on every tile,
      while these em values resolve once and run on the compositor */
@@ -245,6 +248,23 @@
 /* adaptive quality: very dense grids skip the per-tile float entirely */
 .ggb--dense .ggb-tile {
   animation: none;
+}
+
+/*
+ * Dense grids (pixelization mode): sub-pixel shadow detail is invisible at
+ * small tile sizes, and hundreds of concurrent transform transitions are
+ * pure overhead — the rAF loop already feeds smooth values every frame.
+ */
+.ggb--dense .ggb-tile-glass {
+  transition: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--ggb-depth-a) * 0.45)),
+    inset 0 -1px 0 rgba(11, 11, 51, calc(var(--ggb-depth-a) * 0.4)),
+    inset 0 0 var(--ggb-splay-px) calc(var(--ggb-splay-px) * -0.35)
+      rgba(255, 255, 255, calc(var(--ggb-refraction-a) * 0.5)),
+    0 calc(var(--ggb-h, 0) * var(--ggb-weave-h) * 12px)
+      calc(var(--ggb-h, 0) * var(--ggb-weave-h) * 18px)
+      rgba(11, 11, 51, calc(var(--ggb-h, 0) * 0.35));
 }
 
 /* stencil void: the cell exists in the grid but carries no glass or motion */
@@ -397,6 +417,14 @@
 
 .ggb--weave .ggb-tile {
   z-index: calc(var(--ggb-h, 0) * 100);
+}
+
+/* tiles mode: promote the glass cores to their own compositor layers, so the
+   pointer-driven rotations move quads instead of repainting tile pixels.
+   Dense grids opt out — thousands of tiny layers cost more than they save;
+   there the write deadband bounds the per-frame repaint area instead. */
+.ggb--ptr-tiles:not(.ggb--dense) .ggb-tile-glass {
+  will-change: transform;
 }
 
 @media (prefers-reduced-motion: reduce) {

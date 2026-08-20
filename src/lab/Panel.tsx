@@ -100,16 +100,36 @@ export function Panel(props: PanelProps) {
     onChange({ ...preset, tileBorder: { ...preset.tileBorder, ...patch } });
 
   const { tiles, glass, tilt, pointerTilt, zoom, motionFx, tileBorder } = preset;
+  // uniform spacing is the default; unlinking reveals the per-axis brick gaps
+  const [linkGaps, setLinkGaps] = useState(preset.tiles.gapX === preset.tiles.gapY);
 
   return (
     <aside className="lab-panel" aria-label="הגדרות">
       <Group title="אריחים">
-        <Slider label="גודל" min={16} max={200} value={tiles.size} unit="px" onChange={(v) => patchTiles({ size: v })} />
-        <Slider label="רווח אופקי" min={0} max={40} value={tiles.gapX} unit="px" onChange={(v) => patchTiles({ gapX: v })} />
-        <Slider label="רווח אנכי" min={0} max={40} value={tiles.gapY} unit="px" onChange={(v) => patchTiles({ gapY: v })} />
+        <Slider label="גודל" min={10} max={200} value={tiles.size} unit="px" onChange={(v) => patchTiles({ size: v })} />
+        <CheckboxField
+          label="ריווח אחיד"
+          checked={linkGaps}
+          onChange={(on) => {
+            setLinkGaps(on);
+            if (on) patchTiles({ gapY: tiles.gapX });
+          }}
+        />
+        {linkGaps ? (
+          <Slider label="ריווח" min={0} max={40} value={tiles.gapX} unit="px" onChange={(v) => patchTiles({ gapX: v, gapY: v })} />
+        ) : (
+          <>
+            <Slider label="רווח אופקי" min={0} max={40} value={tiles.gapX} unit="px" onChange={(v) => patchTiles({ gapX: v })} />
+            <Slider label="רווח אנכי" min={0} max={40} value={tiles.gapY} unit="px" onChange={(v) => patchTiles({ gapY: v })} />
+          </>
+        )}
         <Slider label="עיגול פינות" min={0} max={60} value={tiles.radius} unit="px" onChange={(v) => patchTiles({ radius: v })} />
         <Slider label="שוליים פנימיים" min={0} max={80} value={tiles.inset} unit="px" onChange={(v) => patchTiles({ inset: v })} />
         <Slider label="מסגרת" min={0} max={6} step={0.5} value={tiles.border} unit="px" onChange={(v) => patchTiles({ border: v })} />
+        <Slider label="מקסימום אריחים" min={100} max={6000} step={50} value={tiles.maxTiles} onChange={(v) => patchTiles({ maxTiles: v })} />
+        <p className="lab-note" role="note">
+          מקסימום גבוה עם אריחים קטנים יוצר פיקסליזציה עדינה — נהדר לצורות
+        </p>
         <SelectField
           label="התאמה"
           value={tiles.fit}
@@ -1266,7 +1286,7 @@ function readAsDataUrl(file: File): Promise<string> {
 function detectedLabel(source: MotionSource): string | null {
   if (source.kind === 'lottie') return 'Lottie';
   if (source.kind !== 'media') return null;
-  return { gif: 'GIF', svg: 'SVG מונפש', video: 'וידאו' }[source.type];
+  return { gif: 'GIF', svg: 'SVG מונפש', video: 'וידאו', image: 'תמונת רקע' }[source.type];
 }
 
 function UploadControls({ preset, onChange }: PanelProps) {
@@ -1293,8 +1313,11 @@ function UploadControls({ preset, onChange }: PanelProps) {
       } else if (ext === 'gif' || ext === 'svg') {
         const src = await readAsDataUrl(file);
         onChange({ ...preset, source: { kind: 'media', src, type: ext, speed: 1 } });
+      } else if (['png', 'jpg', 'jpeg', 'webp', 'avif'].includes(ext)) {
+        const src = await readAsDataUrl(file);
+        onChange({ ...preset, source: { kind: 'media', src, type: 'image', speed: 1 } });
       } else {
-        setError('אפשר להעלות קבצים מסוג gif / svg / mp4 / webm / json');
+        setError('אפשר להעלות תמונות (png / jpg / webp) וקבצי תנועה (gif / svg / mp4 / webm / json)');
         return;
       }
       setFileName(file.name);
@@ -1317,7 +1340,7 @@ function UploadControls({ preset, onChange }: PanelProps) {
         className={`lab-dropzone${dragOver ? ' is-over' : ''}`}
         role="button"
         tabIndex={0}
-        aria-label="העלאת קובץ תנועה"
+        aria-label="העלאת רקע או קובץ תנועה"
         onClick={() => inputRef.current?.click()}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -1337,13 +1360,13 @@ function UploadControls({ preset, onChange }: PanelProps) {
           if (file) void applyFile(file);
         }}
       >
-        לגרור קובץ לכאן או ללחוץ לבחירה
-        <div className="lab-dropzone-hint">gif · svg · mp4 · webm · json (Lottie)</div>
+        לגרור רקע לכאן או ללחוץ לבחירה
+        <div className="lab-dropzone-hint">png · jpg · webp · gif · svg · mp4 · webm · json (Lottie)</div>
       </div>
       <input
         ref={inputRef}
         type="file"
-        accept=".gif,.svg,.mp4,.webm,.json"
+        accept=".png,.jpg,.jpeg,.webp,.avif,.gif,.svg,.mp4,.webm,.json"
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -1382,6 +1405,11 @@ function UploadControls({ preset, onChange }: PanelProps) {
       {source.kind === 'media' && (source.type === 'gif' || source.type === 'svg') && (
         <p className="lab-note" role="note">
           מהירות ולולאה נקבעות בתוך הקובץ עצמו
+        </p>
+      )}
+      {source.kind === 'media' && source.type === 'image' && (
+        <p className="lab-note" role="note">
+          תמונת רקע סטטית — התנועה מגיעה מהזכוכית, מהטילט ומהפרלקסה
         </p>
       )}
     </>

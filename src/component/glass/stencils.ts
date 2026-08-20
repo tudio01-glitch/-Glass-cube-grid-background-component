@@ -216,6 +216,8 @@ const draws: Record<string, DrawFn> = {
     ctx.quadraticCurveTo(82 * m, 90 * m, 84 * m, 14 * m);
     ctx.fill();
   },
+  // solid vesica — the iris/pupil are drawn by the eye scene BEHIND the
+  // glass, so the layout itself stays fully tiled (no hole in the middle)
   eye: (ctx, s) => {
     const m = s / 100;
     ctx.beginPath();
@@ -223,11 +225,6 @@ const draws: Record<string, DrawFn> = {
     ctx.quadraticCurveTo(50 * m, 4 * m, 95 * m, 50 * m);
     ctx.quadraticCurveTo(50 * m, 96 * m, 5 * m, 50 * m);
     ctx.fill();
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.beginPath();
-    ctx.arc(50 * m, 50 * m, 15 * m, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
   },
   infinity: (ctx, s) => {
     const m = s / 100;
