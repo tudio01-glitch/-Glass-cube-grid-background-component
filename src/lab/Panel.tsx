@@ -254,6 +254,7 @@ export function Panel(props: PanelProps) {
           options={[
             { value: 'off', label: 'כבוי' },
             { value: 'tiles', label: 'אריחים — כל אריח נוטה לסמן' },
+            { value: 'scatter', label: 'פיזור — האריחים נדחפים מהסמן לצדדים' },
             { value: 'surface', label: 'כל המשטח נוטה יחד' },
           ]}
           onChange={(v) => patchPointerTilt({ mode: v })}
@@ -267,7 +268,7 @@ export function Panel(props: PanelProps) {
             onChange={(v) => patchPointerTilt({ strength: v })}
           />
         )}
-        {pointerTilt.mode === 'tiles' && (
+        {(pointerTilt.mode === 'tiles' || pointerTilt.mode === 'scatter') && (
           <Slider
             label="רדיוס"
             min={10}
@@ -277,7 +278,7 @@ export function Panel(props: PanelProps) {
             onChange={(v) => patchPointerTilt({ radius: v })}
           />
         )}
-        {pointerTilt.mode === 'tiles' && (
+        {(pointerTilt.mode === 'tiles' || pointerTilt.mode === 'scatter') && (
           <Segmented
             label="גל הקשה"
             value={motionFx.tapPulse}
@@ -625,12 +626,9 @@ function StencilControls({ preset, onChange }: PanelProps) {
   };
 
   const sceneActive = preset.source.kind === 'scene';
-  const scenePalette =
-    preset.source.kind === 'scene'
-      ? preset.source.colors
-      : preset.source.kind === 'shapes'
-        ? preset.source.preset.colors
-        : BEZEQ_COLORS;
+  // scenes are staged on a dark ground — a fresh activation starts from the
+  // proven palette; the four swatches below adapt it per design
+  const scenePalette = preset.source.kind === 'scene' ? preset.source.colors : BEZEQ_COLORS;
 
   const loadIcon = (file: File) => {
     setFileError(null);
@@ -1096,6 +1094,7 @@ function ShapesControls({ preset, onChange, originPicking, onOriginPickingChange
               { value: 'grad-waves', label: 'גלי צבע רכים' },
               { value: 'grad-stripes', label: 'פסים אלכסוניים' },
               { value: 'grad-silk', label: 'משי מתנועע' },
+              { value: 'grad-band', label: 'רצועת שחר בהירה' },
             ],
           },
         ]}

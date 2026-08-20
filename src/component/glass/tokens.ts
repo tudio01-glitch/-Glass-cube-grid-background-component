@@ -69,14 +69,15 @@ export type ZoomSettings = {
 };
 
 /**
- * Pointer-driven tilt: the cursor tips tiles in every direction.
+ * Pointer-driven interaction: the cursor moves tiles in every direction.
  * 'tiles' rotates each tile toward the cursor with a distance falloff;
- * 'surface' tips the whole plane after the static tilt.
+ * 'scatter' pushes tiles sideways away from the cursor (they part around
+ * it and ease back); 'surface' tips the whole plane after the static tilt.
  */
 export type PointerTiltSettings = {
-  mode: 'off' | 'tiles' | 'surface';
-  strength: number; // 0-100 -> up to ~28deg per tile / ~14deg surface. default 55
-  radius: number; // 0-100, cursor influence radius as % of min side (tiles mode). default 45
+  mode: 'off' | 'tiles' | 'scatter' | 'surface';
+  strength: number; // 0-100 -> up to ~28deg per tile / push distance / ~14deg surface. default 55
+  radius: number; // 0-100, cursor influence radius as % of min side (tiles/scatter). default 45
 };
 
 /** The embossed bump at the center of every tile. */
@@ -126,7 +127,8 @@ export type ShapeKind =
   | 'grad-pulse' // radial color rings breathing out of the origin
   | 'grad-waves' // near-vertical gradient with undulating stops
   | 'grad-stripes' // diagonal color bands scrolling
-  | 'grad-silk'; // translucent sweeps interfering like silk
+  | 'grad-silk' // translucent sweeps interfering like silk
+  | 'grad-band'; // broad diagonal color band breathing over a light ground
 
 /** Post-processing pixel play applied to canvas-rendered backgrounds. */
 export type PixelEffect = {
@@ -296,25 +298,33 @@ export function normalizeTiles(input: TileSettingsInput = {}): TileSettings {
   return tiles;
 }
 
+/**
+ * Milky frosted default: a solid-white fill at real opacity plus soft outer
+ * shading makes every tile clearly present even over bright backgrounds,
+ * without paying for a per-tile backdrop blur.
+ */
 export const defaultGlass: GlassSettings = {
   frost: 0,
   refraction: 100,
-  dispersion: 100,
-  depth: 100,
+  dispersion: 45,
+  depth: 80,
   splay: 100,
   lightAngle: -45,
-  lightIntensity: 80,
-  opacity: 12,
-  tint: 'rgba(255,255,255,0.08)',
+  lightIntensity: 75,
+  opacity: 32,
+  tint: '#FFFFFF',
 };
 
+/** Warm dawn band — a light ground with a diagonal red-orange-gold current. */
+export const DAWN_COLORS = ['#F4502E', '#FF9838', '#FFC93C', '#FFF4E9'];
+
 export const defaultShapes: ShapesPreset = {
-  shape: 'sine',
-  colors: BEZEQ_COLORS,
-  size: 30,
+  shape: 'grad-band',
+  colors: DAWN_COLORS,
+  size: 55,
   count: 6,
-  speed: 1,
-  blur: 20,
+  speed: 0.8,
+  blur: 0,
   origin: { x: 0.5, y: 0.5 },
 };
 

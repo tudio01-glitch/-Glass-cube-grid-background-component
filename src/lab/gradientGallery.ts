@@ -22,6 +22,13 @@ const AURORA = ['#52F0B9', '#2AF0E5', '#2A73F0', '#050B22'];
 const ROYAL = ['#B58CFF', '#7A2FF0', '#2A2FA0', '#0B0B33'];
 const FIRE = ['#FFD166', '#FF7A45', '#F7284A', '#330B14'];
 const ICE = ['#E8F4FF', '#9AD5FF', '#52B9F0', '#112B44'];
+// light family — bright grounds with soft color currents
+const DAWN = ['#F4502E', '#FF9838', '#FFC93C', '#FFF4E9'];
+const PEACH = ['#FFB3A7', '#FFD3A8', '#FFE9D6', '#FFF9F4'];
+const MINT = ['#5ED8B9', '#A8ECD9', '#E8FFF7', '#F7FFFC'];
+const SKYMILK = ['#9AC8FF', '#C9E2FF', '#EAF4FF', '#F8FBFF'];
+const LILAC = ['#C9A8F0', '#E2CFF7', '#F3EAFB', '#FBF8FE'];
+const LEMONADE = ['#FFD166', '#FF9AD5', '#FFF3C9', '#FFFBEF'];
 
 function entry(
   id: string,
@@ -121,5 +128,42 @@ export const gradientGallery: GalleryEntry[] = [
     colors: ROYAL,
     count: 8,
     speed: 1.1,
+  }),
+  // ---- the light family ----
+  entry('band-dawn', 'שחר חם', `linear-gradient(125deg, ${DAWN[3]} 12%, ${DAWN[0]} 38%, ${DAWN[1]} 55%, ${DAWN[2]} 68%, ${DAWN[3]} 92%)`, {
+    shape: 'grad-band',
+    colors: DAWN,
+    size: 55,
+    speed: 0.8,
+  }),
+  entry('band-peach', 'אפרסק חלבי', `linear-gradient(125deg, ${PEACH[3]} 10%, ${PEACH[0]} 42%, ${PEACH[1]} 60%, ${PEACH[3]} 90%)`, {
+    shape: 'grad-band',
+    colors: PEACH,
+    size: 62,
+    speed: 0.6,
+  }),
+  entry('mesh-mint', 'מנטה בהירה', `radial-gradient(at 30% 30%, ${MINT[0]} 0%, transparent 55%), radial-gradient(at 70% 65%, ${MINT[1]} 0%, transparent 60%), ${MINT[3]}`, {
+    shape: 'grad-mesh',
+    colors: MINT,
+    size: 48,
+    count: 4,
+    speed: 0.7,
+  }),
+  entry('waves-skymilk', 'שמי בוקר', `linear-gradient(180deg, ${SKYMILK[0]}, ${SKYMILK[1]} 45%, ${SKYMILK[2]} 75%, ${SKYMILK[3]})`, {
+    shape: 'grad-waves',
+    colors: SKYMILK,
+    speed: 0.5,
+  }),
+  entry('silk-lilac', 'לילך פודרה', `linear-gradient(55deg, ${LILAC[0]}66, transparent 60%), linear-gradient(-50deg, ${LILAC[1]}77, transparent 65%), ${LILAC[3]}`, {
+    shape: 'grad-silk',
+    colors: LILAC,
+    count: 6,
+    speed: 0.7,
+  }),
+  entry('pulse-lemonade', 'לימונדה', `radial-gradient(circle at 50% 55%, ${LEMONADE[0]}, ${LEMONADE[1]} 40%, ${LEMONADE[2]} 70%, ${LEMONADE[3]})`, {
+    shape: 'grad-pulse',
+    colors: LEMONADE,
+    count: 4,
+    speed: 0.8,
   }),
 ];

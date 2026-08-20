@@ -68,7 +68,7 @@ deadband), so pointer cost doesn't grow with the count.
 
 | kind     | payload                                                | notes                                  |
 | -------- | ------------------------------------------------------ | -------------------------------------- |
-| `shapes` | `preset: { shape, colors, size, count, speed, blur, origin }` | canvas shapes: `circle`, `ripple`, `sine`, `blob`, `orbit` — plus the animated gradient family: `grad-sweep`, `grad-conic`, `grad-mesh`, `grad-aurora`, `grad-pulse`, `grad-waves`, `grad-stripes`, `grad-silk` |
+| `shapes` | `preset: { shape, colors, size, count, speed, blur, origin }` | canvas shapes: `circle`, `ripple`, `sine`, `blob`, `orbit` — plus the animated gradient family: `grad-sweep`, `grad-conic`, `grad-mesh`, `grad-aurora`, `grad-pulse`, `grad-waves`, `grad-stripes`, `grad-silk`, `grad-band` (broad diagonal color band over a light ground — the default "dawn" look) |
 | `media`  | `src, type: 'gif' \| 'video' \| 'svg' \| 'image', speed?` | `<img>` for gif/svg/static images (png/jpg/webp), muted looping `<video>` for mp4/webm |
 | `lottie` | `data: object \| string, speed?, loop?`                 | lottie-web, canvas renderer, lazy-loaded |
 | `draw`   | `path: Point[], stroke, color, motion`                  | motion: `path` / `pulse` / `drift`     |
@@ -99,13 +99,13 @@ Every token can be overridden per instance.
 | `--ggb-tile-border` | `tiles.border` | `1px` |
 | `--ggb-frost` | `glass.frost` | `0` (0–100 → blur 0–24px) |
 | `--ggb-refraction` | `glass.refraction` | `100` |
-| `--ggb-dispersion` | `glass.dispersion` | `100` |
-| `--ggb-depth` | `glass.depth` | `100` |
+| `--ggb-dispersion` | `glass.dispersion` | `45` |
+| `--ggb-depth` | `glass.depth` | `80` |
 | `--ggb-splay` | `glass.splay` | `100` |
 | `--ggb-light-angle` | `glass.lightAngle` | `-45` (degrees) |
-| `--ggb-light-intensity` | `glass.lightIntensity` | `80` |
-| `--ggb-opacity` | `glass.opacity` | `12` |
-| `--ggb-tint` | `glass.tint` | `rgba(255,255,255,0.08)` |
+| `--ggb-light-intensity` | `glass.lightIntensity` | `75` |
+| `--ggb-opacity` | `glass.opacity` | `32` |
+| `--ggb-tint` | `glass.tint` | `#FFFFFF` (milky frosted default) |
 | `--ggb-tilt-x` | `tilt.x` | `0` (deg, rotateX) |
 | `--ggb-tilt-y` | `tilt.y` | `0` (deg, rotateY) |
 | `--ggb-perspective` | `tilt.perspective` | `900px` |
@@ -124,7 +124,7 @@ Every token can be overridden per instance.
 | `--ggb-border-angle` | `tileBorder.angle` | `135` (deg) |
 | `--ggb-border-opacity` | `tileBorder.opacity` | `90` |
 | `--ggb-weave-height` | `weave.height` | `50` (global relief strength) |
-| `--ggb-color-1..4` | shapes palette | Bezeq: `#F74A84` `#2A73F0` `#52B9F0` `#0B0B33` |
+| `--ggb-color-1..4` | shapes palette | dawn: `#F4502E` `#FF9838` `#FFC93C` `#FFF4E9` |
 | `--ggb-speed` | source speed | `1` |
 
 Tilt tips the source + grid as one plane (`perspective → rotateX/rotateY`) with an
@@ -133,7 +133,9 @@ automatic zoom compensation so the tipped surface keeps covering the container.
 **Pointer tilt** reacts to the mouse in every direction (on by default, mode `tiles`):
 in `tiles` mode each tile rotates toward the cursor with a distance falloff (`radius`
 sets the influence circle, `strength` the maximum angle), so the grid bends around the
-pointer; in `surface` mode the whole plane tips after the static tilt. Values are
+pointer; in `scatter` mode tiles are pushed sideways away from the cursor instead —
+they part around it and ease back when it leaves (tap pulses push outward too); in
+`surface` mode the whole plane tips after the static tilt. Values are
 written straight to per-tile CSS variables from one rAF-throttled listener — no React
 re-renders — and everything eases back when the cursor leaves. Honors
 `prefers-reduced-motion` (the effect simply stays off).
@@ -165,8 +167,9 @@ all tiles (each tile samples its height bilinearly and scales/lifts/brightens
 accordingly). The heightmap is serialized into the preset, so it travels
 through save/export like everything else.
 
-The Bezeq default preset lives in `presets/default.json` (tutorial values: refraction 100,
-depth 100, dispersion 100, frost 0, splay 100, light −45° / 80%, `sine` warp 0→5 over ~10s).
+The default preset lives in `presets/default.json`: milky frosted tiles (solid-white
+fill at 32% with a whisper of drop shadow, so glass reads clearly even white-on-white)
+over the warm `grad-band` dawn background — no per-tile backdrop blur needed.
 
 ## The lab (`/lab`)
 
@@ -265,9 +268,10 @@ glass cubes as one layer and `zoom.source` zooms the background canvas in and ou
 grid zoom automatically.
 
 The **gallery tab** holds a curated collection of animated gradient backgrounds
-(15 ready-made cards — rotating sweeps, conic swirls, liquid mesh, aurora curtains,
-radial pulses, soft waves, scrolling diagonal stripes and silk interference, across
-several palettes). Clicking a card applies it as the motion source; it can then be
+(21 ready-made cards — rotating sweeps, conic swirls, liquid mesh, aurora curtains,
+radial pulses, soft waves, scrolling diagonal stripes and silk interference, plus a
+light family: warm dawn bands, milky peach, bright mint, morning skies, powder lilac
+and lemonade — across dark and light palettes). Clicking a card applies it as the motion source; it can then be
 fine-tuned in the shapes tab, and it travels through presets/export like any source. Shapes origin can be set by
 clicking the preview; the draw tab draws freehand directly over it. The panel is fully
 keyboard operable and `prefers-reduced-motion` freezes the source layer on its first frame

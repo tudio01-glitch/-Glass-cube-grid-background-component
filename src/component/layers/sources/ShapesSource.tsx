@@ -346,6 +346,48 @@ const renderGradSilk: Renderer = (ctx, w, h, _pad, p, t) => {
   ctx.globalCompositeOperation = 'source-over';
 };
 
+/**
+ * Broad diagonal color band breathing over a light ground (the "dawn" look):
+ * the last palette color is the ground, the rest blend along a soft band
+ * crossing bottom-left to top-right, drifting slowly with roaming accents.
+ */
+const renderGradBand: Renderer = (ctx, w, h, _pad, p, t) => {
+  const colors = palette(p);
+  const ground = colors[colors.length - 1];
+  ctx.fillStyle = ground;
+  ctx.fillRect(0, 0, w, h);
+  const band = colors.slice(0, Math.max(1, colors.length - 1));
+  const min = Math.min(w, h);
+  const ang = -Math.PI / 5 + Math.sin(t * 0.1) * 0.05; // band axis, ↗ diagonal
+  const nx = -Math.sin(ang);
+  const ny = Math.cos(ang);
+  const drift = Math.sin(t * 0.16) * min * 0.1;
+  const cx = w / 2 + nx * drift;
+  const cy = h / 2 + ny * drift;
+  const half = Math.max(60, (p.size / 100) * min * 0.95);
+  const g = ctx.createLinearGradient(cx - nx * half, cy - ny * half, cx + nx * half, cy + ny * half);
+  g.addColorStop(0, withAlpha(band[0], 0));
+  band.forEach((c, i) => {
+    g.addColorStop(0.16 + (0.68 * (i + 0.5)) / band.length, withAlpha(c, 0.92));
+  });
+  g.addColorStop(1, withAlpha(band[band.length - 1], 0));
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  // roaming accents travel along the band so the color mix keeps living
+  for (let k = 0; k < 3; k++) {
+    const d = Math.sin(t * (0.21 + k * 0.07) + k * 2.1) * min * 0.45;
+    const ax = cx + Math.cos(ang) * d;
+    const ay = cy + Math.sin(ang) * d;
+    const r = Math.max(1, min * (0.3 + 0.1 * Math.sin(t * 0.33 + k * 1.4)));
+    const rg = ctx.createRadialGradient(ax, ay, 0, ax, ay, r);
+    const c = band[k % band.length];
+    rg.addColorStop(0, withAlpha(c, 0.45));
+    rg.addColorStop(1, withAlpha(c, 0));
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, w, h);
+  }
+};
+
 const renderers: Record<ShapesPreset['shape'], Renderer> = {
   circle: renderCircle,
   ripple: renderRipple,
@@ -360,6 +402,7 @@ const renderers: Record<ShapesPreset['shape'], Renderer> = {
   'grad-waves': renderGradWaves,
   'grad-stripes': renderGradStripes,
   'grad-silk': renderGradSilk,
+  'grad-band': renderGradBand,
 };
 
 function renderShapes(

@@ -234,7 +234,8 @@ export function GlassGridBg({
     const root = rootRef.current;
     const grid = gridRef.current;
     const pointerOn = pt.mode !== 'off';
-    const wavesOn = pt.mode === 'tiles' && mfx.tapPulse === 'on';
+    const perTile = pt.mode === 'tiles' || pt.mode === 'scatter';
+    const wavesOn = perTile && mfx.tapPulse === 'on';
     // gyro is a touch-device affordance — never fight the mouse on hybrids
     const gyroOn =
       pointerOn && mfx.gyro === 'auto' && window.matchMedia('(pointer: coarse)').matches;
@@ -274,6 +275,8 @@ export function GlassGridBg({
         const el = child as HTMLElement;
         el.style.removeProperty('--ggb-ptr-rx');
         el.style.removeProperty('--ggb-ptr-ry');
+        el.style.removeProperty('--ggb-ptr-tx');
+        el.style.removeProperty('--ggb-ptr-ty');
       }
       active.clear();
       lastRx.fill(0);
@@ -300,11 +303,14 @@ export function GlassGridBg({
         return;
       }
 
-      // tiles mode
+      // per-tile modes: 'tiles' writes rotations, 'scatter' writes pushes
+      const isScatter = pt.mode === 'scatter';
+      const db = isScatter ? DEADBAND * 2 : DEADBAND; // px vs deg
       const now = performance.now();
       const maxDim = Math.hypot(r.width, r.height);
       const radiusPx = Math.max(40, (pt.radius / 100) * Math.min(r.width, r.height));
       const maxDeg = (pt.strength / 100) * 28;
+      const maxPush = (pt.strength / 100) * radiusPx * 0.42;
       const bandW = radiusPx * 0.45;
       const waveSpeed = maxDim * 1.1; // px/s — one sweep across in ~0.9s
       // tap origins arrive in client px; adopt them into zoom-corrected
@@ -350,14 +356,23 @@ export function GlassGridBg({
         const row = (i / layout.cols) | 0;
         const cx = originX + col * (layout.tileSize + t.gapX) + layout.tileSize / 2;
         const cy = originY + row * (layout.tileSize + t.gapY) + layout.tileSize / 2;
+        // 'tiles': (rx, ry) are deg rotations toward the cursor;
+        // 'scatter': (rx, ry) are px pushes away from it — same storage
         let rx = 0;
         let ry = 0;
         if (cursorPt) {
           const dx = cursorPt.x - cx;
           const dy = cursorPt.y - cy;
-          const influence = Math.max(0, 1 - Math.hypot(dx, dy) / radiusPx);
-          rx += (dy / radiusPx) * maxDeg * influence;
-          ry += (-dx / radiusPx) * maxDeg * influence;
+          const d = Math.max(1, Math.hypot(dx, dy));
+          const influence = Math.max(0, 1 - d / radiusPx);
+          if (isScatter) {
+            const push = maxPush * Math.pow(influence, 1.35);
+            rx += (-dx / d) * push;
+            ry += (-dy / d) * push;
+          } else {
+            rx += (dy / radiusPx) * maxDeg * influence;
+            ry += (-dx / radiusPx) * maxDeg * influence;
+          }
         }
         for (const w of waves) {
           const wdx = cx - w.x;
@@ -366,21 +381,24 @@ export function GlassGridBg({
           const R = ((now - w.t0) / 1000) * waveSpeed;
           const band = Math.exp(-(((d - R) / bandW) * ((d - R) / bandW)));
           const decay = Math.exp(-R / (maxDim * 1.1));
-          const a = maxDeg * 1.3 * band * decay;
-          rx += (wdy / d) * a;
-          ry += (-wdx / d) * a;
+          if (isScatter) {
+            const a = maxPush * 1.4 * band * decay;
+            rx += (wdx / d) * a;
+            ry += (wdy / d) * a;
+          } else {
+            const a = maxDeg * 1.3 * band * decay;
+            rx += (wdy / d) * a;
+            ry += (-wdx / d) * a;
+          }
         }
         // only tiles inside the influence circle / wave band get DOM writes
         if (Math.abs(rx) + Math.abs(ry) > 0.01) {
           next.add(i);
           // sub-deadband change: keep the previous written value, skip the DOM
-          if (
-            Math.abs(rx - lastRx[i]) > DEADBAND ||
-            Math.abs(ry - lastRy[i]) > DEADBAND
-          ) {
+          if (Math.abs(rx - lastRx[i]) > db || Math.abs(ry - lastRy[i]) > db) {
             const el = children[i] as HTMLElement;
-            el.style.setProperty('--ggb-ptr-rx', rx.toFixed(2));
-            el.style.setProperty('--ggb-ptr-ry', ry.toFixed(2));
+            el.style.setProperty(isScatter ? '--ggb-ptr-tx' : '--ggb-ptr-rx', rx.toFixed(2));
+            el.style.setProperty(isScatter ? '--ggb-ptr-ty' : '--ggb-ptr-ry', ry.toFixed(2));
             lastRx[i] = rx;
             lastRy[i] = ry;
           }
@@ -392,6 +410,8 @@ export function GlassGridBg({
           if (el) {
             el.style.removeProperty('--ggb-ptr-rx');
             el.style.removeProperty('--ggb-ptr-ry');
+            el.style.removeProperty('--ggb-ptr-tx');
+            el.style.removeProperty('--ggb-ptr-ty');
           }
           lastRx[i] = 0;
           lastRy[i] = 0;

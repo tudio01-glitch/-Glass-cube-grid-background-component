@@ -257,30 +257,52 @@ const sceneDrop: SceneFn = (ctx, w, h, sq, c, t) => {
   glow(ctx, sq.cx + Math.sin(t * 0.7) * s * 0.2, level + s * 0.2, s * 0.18, '#ffffff', 0.18);
 };
 
-/** The bolt discharges: strobing flashes with a jittering arc. */
+/**
+ * The bolt discharges. The flash is registered to the stencil's own
+ * geometry — the silhouette itself lights up and the jagged arc rides the
+ * bolt's spine (top-right tip down-left to the bottom tip), so the scene
+ * always carries the same lean as the tile layout, never a mirrored one.
+ */
+const BOLT_SPINE: [number, number][] = [
+  [58, 6],
+  [47, 30],
+  [51, 44],
+  [41, 58],
+  [45, 74],
+  [38, 94],
+];
 const sceneBolt: SceneFn = (ctx, w, h, sq, c, t) => {
-  const { s, cx, cy } = sq;
+  const { s } = sq;
+  const px = (v: number) => sq.x + (v / 100) * s;
+  const py = (v: number) => sq.y + (v / 100) * s;
   const q = Math.floor(t * 1.3);
   const ft = (t * 1.3) % 1;
   const strong = ((Math.sin(q * 127.1) * 43758.5453) % 1 + 1) % 1 > 0.35;
   const flash = strong ? Math.exp(-Math.pow(ft / 0.14, 2)) : 0;
   if (flash > 0.02) {
-    ctx.fillStyle = withAlpha(c[2], flash * 0.35);
+    ctx.fillStyle = withAlpha(c[2], flash * 0.3);
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = withAlpha('#ffffff', flash * 0.9);
-    ctx.lineWidth = s * 0.015;
+    // the silhouette lights up in place, perfectly under the tiles
+    ctx.save();
+    ctx.globalAlpha = flash * 0.55;
+    ctx.translate(sq.x, sq.y);
+    ctx.fillStyle = '#ffffff';
+    drawStencil('bolt', ctx, s);
+    ctx.restore();
+    // jagged discharge along the spine, jittered per strike
+    ctx.strokeStyle = withAlpha('#ffffff', flash * 0.95);
+    ctx.lineWidth = s * 0.018;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    let px = cx - s * 0.1;
-    let py = cy - s * 0.4;
-    ctx.moveTo(px, py);
-    for (let i = 0; i < 6; i++) {
-      px += (((Math.sin((q + i) * 91.7) * 23421.63) % 1) - 0.3) * s * 0.16;
-      py += s * 0.13;
-      ctx.lineTo(px, py);
-    }
+    BOLT_SPINE.forEach(([vx, vy], i) => {
+      const edge = i === 0 || i === BOLT_SPINE.length - 1;
+      const j = edge ? 0 : (((Math.sin((q + i) * 91.7) * 23421.63) % 1) - 0.5) * 7;
+      if (i === 0) ctx.moveTo(px(vx), py(vy));
+      else ctx.lineTo(px(vx + j), py(vy));
+    });
     ctx.stroke();
   }
-  glow(ctx, cx, cy, s * 0.35, c[0], 0.25 + flash * 0.4);
+  glow(ctx, px(48), py(50), s * 0.35, c[0], 0.22 + flash * 0.45);
 };
 
 const scenes: Record<string, SceneFn> = {
