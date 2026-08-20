@@ -18,6 +18,7 @@ import type {
   ReliefSettings,
   ShapesPreset,
   StencilSettings,
+  TileBorderSettings,
   TileSettings,
   TiltSettings,
   WeaveSettings,
@@ -48,7 +49,7 @@ import {
 export type SourceTab = 'shapes' | 'gallery' | 'upload' | 'draw';
 
 export function categoryOf(source: MotionSource): SourceTab {
-  if (source.kind === 'shapes') return 'shapes';
+  if (source.kind === 'shapes' || source.kind === 'scene') return 'shapes';
   if (source.kind === 'draw') return 'draw';
   return 'upload';
 }
@@ -95,8 +96,10 @@ export function Panel(props: PanelProps) {
     onChange({ ...preset, zoom: { ...preset.zoom, ...patch } });
   const patchMotionFx = (patch: Partial<MotionFxSettings>) =>
     onChange({ ...preset, motionFx: { ...preset.motionFx, ...patch } });
+  const patchTileBorder = (patch: Partial<TileBorderSettings>) =>
+    onChange({ ...preset, tileBorder: { ...preset.tileBorder, ...patch } });
 
-  const { tiles, glass, tilt, pointerTilt, zoom, motionFx } = preset;
+  const { tiles, glass, tilt, pointerTilt, zoom, motionFx, tileBorder } = preset;
 
   return (
     <aside className="lab-panel" aria-label="הגדרות">
@@ -117,6 +120,49 @@ export function Panel(props: PanelProps) {
           ]}
           onChange={(v) => patchTiles({ fit: v })}
         />
+
+        <h4 className="lab-subtitle">קו מתאר</h4>
+        <Segmented
+          label="סגנון"
+          value={tileBorder.style}
+          options={[
+            { value: 'light', label: 'לפי אור' },
+            { value: 'linear', label: 'גרדיאנט' },
+            { value: 'conic', label: 'קוני' },
+          ]}
+          onChange={(v) => patchTileBorder({ style: v })}
+        />
+        {tileBorder.style !== 'light' && (
+          <>
+            <div className="lab-swatches">
+              <ColorField
+                label="צבע 1"
+                value={tileBorder.color1}
+                onChange={(v) => patchTileBorder({ color1: v })}
+              />
+              <ColorField
+                label="צבע 2"
+                value={tileBorder.color2}
+                onChange={(v) => patchTileBorder({ color2: v })}
+              />
+            </div>
+            <Slider
+              label="זווית"
+              min={-180}
+              max={180}
+              value={tileBorder.angle}
+              unit="°"
+              onChange={(v) => patchTileBorder({ angle: v })}
+            />
+            <Slider
+              label="אטימות"
+              min={0}
+              max={100}
+              value={tileBorder.opacity}
+              onChange={(v) => patchTileBorder({ opacity: v })}
+            />
+          </>
+        )}
       </Group>
 
       <Group title="זכוכית">
@@ -548,8 +594,23 @@ function StencilControls({ preset, onChange }: PanelProps) {
   const st = preset.stencil;
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-  const patchStencil = (patch: Partial<StencilSettings>) =>
-    onChange({ ...preset, stencil: { ...st, ...patch } });
+  const patchStencil = (patch: Partial<StencilSettings>) => {
+    const nextStencil = { ...st, ...patch };
+    // an active shape-matched scene follows the stencil automatically
+    const source =
+      preset.source.kind === 'scene' && nextStencil.shape !== 'off' && nextStencil.shape !== 'custom'
+        ? { ...preset.source, shape: nextStencil.shape, scale: nextStencil.scale }
+        : preset.source;
+    onChange({ ...preset, stencil: nextStencil, source });
+  };
+
+  const sceneActive = preset.source.kind === 'scene';
+  const scenePalette =
+    preset.source.kind === 'scene'
+      ? preset.source.colors
+      : preset.source.kind === 'shapes'
+        ? preset.source.preset.colors
+        : BEZEQ_COLORS;
 
   const loadIcon = (file: File) => {
     setFileError(null);
@@ -632,6 +693,14 @@ function StencilControls({ preset, onChange }: PanelProps) {
             unit="%"
             onChange={(v) => patchStencil({ scale: v })}
           />
+          <Slider
+            label="שולי חיתוך"
+            min={0}
+            max={40}
+            value={st.padding}
+            unit="px"
+            onChange={(v) => patchStencil({ padding: v })}
+          />
           <CheckboxField
             label="היפוך"
             checked={st.invert}
@@ -640,6 +709,69 @@ function StencilControls({ preset, onChange }: PanelProps) {
           <p className="lab-note" role="note">
             לפריסה חדה יותר כדאי אריחים קטנים — סביב 24–32px
           </p>
+
+          <h4 className="lab-subtitle">רקע מותאם לצורה — הרקע משלים את הפריסה</h4>
+          {st.shape !== 'custom' ? (
+            <div className="lab-actions">
+              <button
+                type="button"
+                className={`lab-button${sceneActive ? ' lab-button-primary' : ''}`}
+                aria-pressed={sceneActive}
+                onClick={() =>
+                  onChange({
+                    ...preset,
+                    source: sceneActive
+                      ? defaultSource
+                      : {
+                          kind: 'scene',
+                          shape: st.shape,
+                          colors: [...scenePalette],
+                          speed: 1,
+                          scale: st.scale,
+                        },
+                  })
+                }
+              >
+                {sceneActive ? 'רקע מותאם פעיל — לכבות' : 'להפעיל רקע מותאם לצורה'}
+              </button>
+            </div>
+          ) : (
+            <p className="lab-note" role="note">
+              רקע מותאם זמין לצורות המובנות — לאייקון שהועלה אפשר כל רקע אחר
+            </p>
+          )}
+          {sceneActive && preset.source.kind === 'scene' && (
+            <>
+              <Slider
+                label="מהירות"
+                min={0.1}
+                max={3}
+                step={0.1}
+                value={preset.source.speed ?? 1}
+                onChange={(v) =>
+                  preset.source.kind === 'scene' &&
+                  onChange({ ...preset, source: { ...preset.source, speed: v } })
+                }
+              />
+              <div className="lab-swatches">
+                {[0, 1, 2, 3].map((i) => (
+                  <ColorField
+                    key={i}
+                    label={`צבע ${i + 1}`}
+                    value={scenePalette[i] ?? BEZEQ_COLORS[i]}
+                    onChange={(v) => {
+                      if (preset.source.kind !== 'scene') return;
+                      const colors = [0, 1, 2, 3].map(
+                        (j) => scenePalette[j] ?? BEZEQ_COLORS[j],
+                      );
+                      colors[i] = v;
+                      onChange({ ...preset, source: { ...preset.source, colors } });
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
     </>
@@ -887,6 +1019,24 @@ function DrawControls({ preset, onChange }: PanelProps) {
 
 function ShapesControls({ preset, onChange, originPicking, onOriginPickingChange }: PanelProps) {
   const source = preset.source;
+  if (source.kind === 'scene') {
+    return (
+      <>
+        <p className="lab-note" role="status">
+          רקע מותאם לצורה פעיל — הכוונון שלו בקבוצת «פריסה»
+        </p>
+        <div className="lab-actions">
+          <button
+            type="button"
+            className="lab-button"
+            onClick={() => onChange({ ...preset, source: defaultSource })}
+          >
+            לחזור לצורות הרגילות
+          </button>
+        </div>
+      </>
+    );
+  }
   if (source.kind !== 'shapes') return null;
   const shapes = source.preset;
   const patchShapes = (patch: Partial<ShapesPreset>) =>
@@ -990,13 +1140,29 @@ function PixelEffectControls({
       <SelectField
         label="אפקט"
         value={e.type}
-        options={[
-          { value: 'off', label: 'כבוי' },
-          { value: 'ripple', label: 'אדוות מים' },
-          { value: 'wind', label: 'רוח' },
-          { value: 'rain', label: 'פיקסלים נופלים' },
-          { value: 'mosaic', label: 'פיקסלים גסים' },
-          { value: 'glitch', label: 'גליץ׳' },
+        groups={[
+          {
+            label: 'כללי',
+            options: [{ value: 'off', label: 'כבוי' }],
+          },
+          {
+            label: 'זרימה',
+            options: [
+              { value: 'stream', label: 'זרימה כיוונית' },
+              { value: 'ripple', label: 'אדוות מים' },
+              { value: 'wind', label: 'רוח' },
+              { value: 'swirl', label: 'מערבולת' },
+              { value: 'melt', label: 'נזילה' },
+            ],
+          },
+          {
+            label: 'פיקסלים',
+            options: [
+              { value: 'rain', label: 'פיקסלים נופלים' },
+              { value: 'mosaic', label: 'פיקסלים גסים' },
+              { value: 'glitch', label: 'גליץ׳' },
+            ],
+          },
         ]}
         onChange={(type) => onChange({ ...e, type })}
       />
@@ -1016,6 +1182,35 @@ function PixelEffectControls({
             step={0.1}
             value={e.speed}
             onChange={(speed) => onChange({ ...e, speed })}
+          />
+          <Slider
+            label="גודל תבנית"
+            min={0}
+            max={100}
+            value={e.scale ?? 50}
+            onChange={(scale) => onChange({ ...e, scale })}
+          />
+          {(e.type === 'stream' || e.type === 'wind' || e.type === 'swirl') && (
+            <Slider
+              label="כיוון"
+              min={-180}
+              max={180}
+              value={e.direction ?? 0}
+              unit="°"
+              onChange={(direction) => onChange({ ...e, direction })}
+            />
+          )}
+          <ColorField
+            label="גוון"
+            value={e.tint ?? '#ffffff'}
+            onChange={(tint) => onChange({ ...e, tint })}
+          />
+          <Slider
+            label="עוצמת גוון"
+            min={0}
+            max={100}
+            value={e.tintStrength ?? 0}
+            onChange={(tintStrength) => onChange({ ...e, tintStrength })}
           />
         </>
       )}

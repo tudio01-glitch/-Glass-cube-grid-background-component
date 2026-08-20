@@ -8,13 +8,14 @@ import {
   defaultRelief,
   defaultSource,
   defaultStencil,
+  defaultTileBorder,
   defaultTilt,
   defaultWeave,
   defaultZoom,
   normalizeTiles,
   tokensToStyle,
 } from './glass/tokens';
-import { buildCropMaskUrl, isStencilId, maskAt, rasterizeStencil } from './glass/stencils';
+import { buildTileCropMaskUrl, isStencilId, maskAt, rasterizeStencil } from './glass/stencils';
 import type {
   GlassGridBgProps,
   GlassQuality,
@@ -157,6 +158,7 @@ export function GlassGridBg({
   zoom,
   motionFx,
   stencil,
+  tileBorder,
   source,
   quality = 'css',
   className,
@@ -171,6 +173,7 @@ export function GlassGridBg({
   const zm = { ...defaultZoom, ...zoom };
   const mfx = { ...defaultMotionFx, ...motionFx };
   const st = { ...defaultStencil, ...stencil };
+  const tb = { ...defaultTileBorder, ...tileBorder };
   const src = source ?? defaultSource;
   const reduced = useReducedMotion();
 
@@ -211,7 +214,7 @@ export function GlassGridBg({
     [box.w, box.h, t.size, t.gapX, t.gapY, t.inset, t.fit],
   );
 
-  const vars = tokensToStyle(t, g, tl, src, rl, wv, pt, zm, mfx);
+  const vars = tokensToStyle(t, g, tl, src, rl, wv, pt, zm, mfx, tb);
 
   /*
    * Interaction system. Three inputs feed the same per-tile tilt vars:
@@ -529,30 +532,29 @@ export function GlassGridBg({
 
   /*
    * Background crop: with a stencil active, the motion layer is masked to
-   * the tiles' silhouette (dilated by ~half a tile so edge tiles keep
-   * background behind them). The mask sits on a non-transforming wrapper,
-   * so parallax/zoom/skew move the source *under* a pinned crop window;
-   * the glass counter-drift is compensated through --ggb-par-grid-px.
+   * the visible cubes themselves — every tile cell expanded by the crop
+   * padding — so the contour stays pixelated by the grid, never the smooth
+   * shape. The mask sits on a non-transforming wrapper, so parallax/zoom/
+   * skew move the source *under* a pinned crop window; the glass parallax
+   * counter-drift is compensated through --ggb-par-grid-px.
    */
   const cropStyle = useMemo<CSSProperties | null>(() => {
-    if (!stencilMask) return null;
-    const gridW = layout.cols * layout.tileSize + (layout.cols - 1) * t.gapX;
-    const gridH = layout.rows * layout.tileSize + (layout.rows - 1) * t.gapY;
-    const side = Math.max(1, (st.scale / 100) * Math.min(gridW, gridH));
-    const url = buildCropMaskUrl({
-      shape: st.shape,
-      customMask: st.shape === 'custom' ? st.mask : null,
-      gridW,
-      gridH,
-      sidePx: side,
-      dilatePx: layout.tileSize * 0.55,
-      invert: st.invert,
+    if (!tileVisible) return null;
+    const url = buildTileCropMaskUrl({
+      visible: tileVisible,
+      cols: layout.cols,
+      rows: layout.rows,
+      tileSize: layout.tileSize,
+      gapX: t.gapX,
+      gapY: t.gapY,
+      radius: t.radius,
+      padPx: st.padding,
     });
     if (!url) return null;
+    const gridW = layout.cols * layout.tileSize + (layout.cols - 1) * t.gapX;
+    const gridH = layout.rows * layout.tileSize + (layout.rows - 1) * t.gapY;
     const zg = Math.max(0.05, zm.grid);
     const size = `${gridW * zg}px ${gridH * zg}px`;
-    // the mask box spans the grid box, centered like the grid itself; the
-    // glass parallax counter-drift is compensated so the crop stays pinned
     const pos = 'center calc(50% + var(--ggb-par-grid-px))';
     return {
       WebkitMaskImage: `url(${url})`,
@@ -564,7 +566,7 @@ export function GlassGridBg({
       WebkitMaskPosition: pos,
       maskPosition: pos,
     };
-  }, [stencilMask, st.shape, st.mask, st.invert, st.scale, layout, t.gapX, t.gapY, zm.grid]);
+  }, [tileVisible, layout, t.gapX, t.gapY, t.radius, st.padding, zm.grid]);
 
   const weaveActive = wv.mode !== 'off';
   const tileHeights = useMemo(() => {
@@ -593,6 +595,7 @@ export function GlassGridBg({
     `ggb--q-${effectiveQuality}`,
     `ggb-grid-fit-${t.fit}`,
     `ggb--relief-${rl.shape}`,
+    `ggb--border-${tb.style}`,
   ];
   if (g.frost <= 0) classes.push('ggb--frost-0');
   if (weaveActive) classes.push('ggb--weave');
@@ -639,7 +642,9 @@ export function GlassGridBg({
                   Object.keys(tileVars).length > 0 ? (tileVars as CSSProperties) : undefined
                 }
               >
-                <div className="ggb-tile-glass" />
+                <div className="ggb-tile-glass">
+                  <span className="ggb-tile-ring" />
+                </div>
               </div>
             );
           })}

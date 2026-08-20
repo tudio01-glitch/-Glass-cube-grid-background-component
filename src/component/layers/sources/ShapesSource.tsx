@@ -378,6 +378,7 @@ function renderShapes(
 type EffectState = {
   cols: { off: Float32Array; v: Float32Array; colW: number } | null;
   tiny: HTMLCanvasElement | null;
+  tmp: HTMLCanvasElement | null;
 };
 
 /** Cheap deterministic pseudo-random from a seed. */
@@ -402,12 +403,14 @@ function applyPixelEffect(
   const H = buf.height;
   const k = e.intensity / 100;
   const s = e.speed;
+  const fscale = Math.min(1, Math.max(0, (e.scale ?? 50) / 100)); // feature size
+  const dir = (((e.direction ?? 0) * Math.PI) / 180) as number;
   switch (e.type) {
     case 'ripple': {
       // water surface: rows displaced by a travelling sine
       ctx.drawImage(buf, 0, 0);
       const amp = k * H * 0.035;
-      const lam = H / 14;
+      const lam = H / (4 + (1 - fscale) * 20);
       const step = Math.max(2, Math.round(H / 320));
       for (let y = 0; y < H; y += step) {
         const dx =
@@ -421,12 +424,17 @@ function applyPixelEffect(
     case 'wind': {
       // gusts: turbulent per-row drift plus a faint streak echo
       ctx.drawImage(buf, 0, 0);
-      const amp = k * W * 0.06;
+      const sign = Math.cos(dir) < 0 ? -1 : 1;
+      const amp = k * W * 0.06 * sign;
       const gust = 0.55 + 0.45 * Math.sin(t * 0.9 * s);
+      const band1 = 8 + fscale * 44;
+      const band2 = 3 + fscale * 10;
       const step = Math.max(2, Math.round(H / 280));
       for (let y = 0; y < H; y += step) {
         const dx =
-          (Math.sin(y / 29 + t * 1.3 * s) + 0.5 * Math.sin(y / 7 - t * 2.1 * s)) * amp * gust;
+          (Math.sin(y / band1 + t * 1.3 * s) + 0.5 * Math.sin(y / band2 - t * 2.1 * s)) *
+          amp *
+          gust;
         ctx.drawImage(buf, 0, y, W, step, dx, y, W, step);
       }
       ctx.globalAlpha = 0.18 * k;
@@ -436,7 +444,7 @@ function applyPixelEffect(
     }
     case 'rain': {
       // falling pixels: a share of the columns slides down and wraps
-      const colW = Math.max(4, Math.round(W / 90));
+      const colW = Math.max(3, Math.round(W * (0.003 + fscale * 0.016)));
       const n = Math.ceil(W / colW);
       if (!state.cols || state.cols.colW !== colW || state.cols.off.length !== n) {
         const off = new Float32Array(n);
@@ -463,8 +471,9 @@ function applyPixelEffect(
       break;
     }
     case 'mosaic': {
-      // coarse pixels: downscale then upscale with smoothing off
-      const block = Math.max(2, (2 + k * 26) * (1 + 0.15 * Math.sin(t * s * 1.5)));
+      // coarse pixels: block size from scale, blend amount from intensity
+      ctx.drawImage(buf, 0, 0);
+      const block = Math.max(2, (2 + fscale * 40) * (1 + 0.15 * Math.sin(t * s * 1.5)));
       const tw = Math.max(1, Math.round(W / block));
       const th = Math.max(1, Math.round(H / block));
       if (!state.tiny) state.tiny = document.createElement('canvas');
@@ -478,7 +487,9 @@ function applyPixelEffect(
       tctx.drawImage(buf, 0, 0, tw, th);
       const smooth = ctx.imageSmoothingEnabled;
       ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = Math.min(1, k * 1.4);
       ctx.drawImage(tiny, 0, 0, W, H);
+      ctx.globalAlpha = 1;
       ctx.imageSmoothingEnabled = smooth;
       break;
     }
@@ -487,16 +498,123 @@ function applyPixelEffect(
       ctx.drawImage(buf, 0, 0);
       const q = Math.floor(t * s * 7);
       const slices = Math.round(2 + k * 10);
+      const hMul = 0.4 + fscale * 1.2;
       for (let i = 0; i < slices; i++) {
         const y = rnd(q * 13.7 + i * 5.3) * H;
-        const hS = (0.01 + rnd(q * 7.9 + i * 2.1) * 0.06) * H;
+        const hS = (0.01 + rnd(q * 7.9 + i * 2.1) * 0.06) * H * hMul;
         const dx = (rnd(q * 3.3 + i * 8.7) - 0.5) * k * W * 0.22;
         ctx.drawImage(buf, 0, y, W, hS, dx, y, W, hS);
       }
       break;
     }
+    case 'stream': {
+      // directional liquid flow: rows shift along X, then columns along Y,
+      // weighted by the direction angle — two slice passes, no rotation
+      if (!state.tmp) state.tmp = document.createElement('canvas');
+      const tmp = state.tmp;
+      if (tmp.width !== W || tmp.height !== H) {
+        tmp.width = W;
+        tmp.height = H;
+      }
+      const tctx = tmp.getContext('2d');
+      if (!tctx) {
+        ctx.drawImage(buf, 0, 0);
+        break;
+      }
+      const cosd = Math.cos(dir);
+      const sind = Math.sin(dir);
+      const lam = H / (4 + (1 - fscale) * 16);
+      const ampX = k * W * 0.06 * Math.abs(cosd);
+      const ampY = k * H * 0.06 * Math.abs(sind);
+      const xSign = cosd < 0 ? -1 : 1;
+      const ySign = sind < 0 ? -1 : 1;
+      tctx.drawImage(buf, 0, 0);
+      const step = Math.max(2, Math.round(H / 300));
+      for (let y = 0; y < H; y += step) {
+        const dx =
+          (Math.sin(y / lam - t * 2.4 * s) + 0.45 * Math.sin(y / (lam * 0.37) + t * 1.7 * s)) *
+          ampX *
+          xSign;
+        tctx.drawImage(buf, 0, y, W, step, dx, y, W, step);
+      }
+      ctx.drawImage(tmp, 0, 0);
+      const stepX = Math.max(2, Math.round(W / 300));
+      for (let x = 0; x < W; x += stepX) {
+        const dy =
+          (Math.sin(x / lam - t * 2.1 * s) + 0.45 * Math.sin(x / (lam * 0.41) + t * 1.5 * s)) *
+          ampY *
+          ySign;
+        if (Math.abs(dy) < 0.3) continue;
+        ctx.drawImage(tmp, x, 0, stepX, H, x, dy, stepX, H);
+      }
+      break;
+    }
+    case 'swirl': {
+      // vortex: concentric rings rotate more the closer they are to center
+      ctx.drawImage(buf, 0, 0);
+      const cx = W / 2;
+      const cy = H / 2;
+      const R = Math.hypot(W, H) / 2;
+      const rings = Math.round(10 + fscale * 26);
+      const spinSign = Math.cos(dir) < 0 ? -1 : 1;
+      const churn = 0.8 + 0.5 * Math.sin(t * 0.6 * s);
+      const maxAng = k * 1.2 * spinSign * churn;
+      for (let i = 0; i < rings; i++) {
+        const r0 = (i / rings) * R;
+        const r1 = ((i + 1) / rings) * R;
+        const ang = maxAng * Math.pow(1 - i / rings, 1.6);
+        if (Math.abs(ang) < 0.003) continue;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r1, 0, Math.PI * 2);
+        ctx.arc(cx, cy, Math.max(0.1, r0), 0, Math.PI * 2, true);
+        ctx.clip();
+        ctx.translate(cx, cy);
+        ctx.rotate(ang);
+        ctx.translate(-cx, -cy);
+        ctx.drawImage(buf, 0, 0);
+        ctx.restore();
+      }
+      break;
+    }
+    case 'melt': {
+      // dripping: random columns slowly stretch downward
+      ctx.drawImage(buf, 0, 0);
+      const colW = Math.max(4, Math.round(W * (0.006 + fscale * 0.03)));
+      const n = Math.ceil(W / colW);
+      for (let i = 0; i < n; i++) {
+        const x = i * colW;
+        const ph = rnd(i * 7.3) * Math.PI * 2;
+        const drip =
+          k * H * 0.18 * (0.5 + 0.5 * Math.sin(t * 0.7 * s + ph)) * (0.3 + rnd(i * 3.1) * 0.7);
+        if (drip < 1) continue;
+        const yStart = H * 0.12 * rnd(i * 5.7);
+        ctx.drawImage(
+          buf,
+          x,
+          yStart,
+          colW,
+          H - yStart,
+          x,
+          yStart + drip * 0.15,
+          colW,
+          (H - yStart) * (1 + drip / H),
+        );
+      }
+      break;
+    }
     default:
       ctx.drawImage(buf, 0, 0);
+  }
+  // color wash: paints the effect result with the chosen tint
+  const tintStrength = e.tintStrength ?? 0;
+  if (tintStrength > 0 && e.type !== 'off') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = Math.min(1, tintStrength / 100);
+    ctx.fillStyle = e.tint ?? '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
   }
 }
 
@@ -522,7 +640,7 @@ export function ShapesSource({ preset }: { preset: ShapesPreset }) {
 
     // pixel-play pipeline: scene renders into a buffer, effect composites it
     const fxCfg = p.effect && p.effect.type !== 'off' ? p.effect : null;
-    const fxState: EffectState = { cols: null, tiny: null };
+    const fxState: EffectState = { cols: null, tiny: null, tmp: null };
     let buf: HTMLCanvasElement | null = null;
     let bufCtx: CanvasRenderingContext2D | null = null;
 

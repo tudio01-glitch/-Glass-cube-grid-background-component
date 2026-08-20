@@ -32,8 +32,10 @@ import { GlassGridBg } from './src/component/GlassGridBg';
   glass={{ refraction: 100, dispersion: 100, depth: 100, frost: 0, splay: 100 }}
   tilt={{ x: 18, y: -12, perspective: 900 }} // 3D tilt of the whole glass surface
   pointerTilt={{ mode: 'tiles', strength: 55, radius: 45 }} // cursor-driven tilt
-  relief={{ shape: 'round', area: 78, height: 55 }} // per-tile bump: round / rect / dome
+  relief={{ shape: 'round', area: 78, height: 0 }} // per-tile bump; 0 (default) = clean tiles
   weave={{ mode: 'dome', height: 60, heightmap: null }} // global relief across all tiles
+  tileBorder={{ style: 'linear', color1: '#FFFFFF', color2: '#52B9F0', angle: 135, opacity: 90 }}
+  stencil={{ shape: 'heart', scale: 92, invert: false, padding: 10 }}
   source={{
     kind: 'shapes',
     preset: {
@@ -65,6 +67,7 @@ size scales up automatically and the wrapper gets `data-ggb-capped`).
 | `media`  | `src, type: 'gif' \| 'video' \| 'svg', speed?`          | `<img>` for gif/svg, muted looping `<video>` for mp4/webm |
 | `lottie` | `data: object \| string, speed?, loop?`                 | lottie-web, canvas renderer, lazy-loaded |
 | `draw`   | `path: Point[], stroke, color, motion`                  | motion: `path` / `pulse` / `drift`     |
+| `scene`  | `shape, colors, speed?, scale?`                         | shape-matched animated scene behind a stencil layout — a blinking eye with a wandering iris behind the `eye` layout, a beating heart behind `heart`, sequential arcs behind `wifi`… every built-in stencil has one |
 
 ### Quality modes
 
@@ -110,7 +113,11 @@ Every token can be overridden per instance.
 | `--ggb-par-depth` | `motionFx.parallaxDepth` | `50` |
 | `--ggb-skew-max` | `motionFx.scrollSkew` | `25` |
 | `--ggb-relief-area` | `relief.area` | `78` (% of tile the bump covers) |
-| `--ggb-relief-height` | `relief.height` | `55` (bump intensity) |
+| `--ggb-relief-height` | `relief.height` | `0` (bump intensity; 0 = clean tiles) |
+| `--ggb-border-c1` | `tileBorder.color1` | `#FFFFFF` |
+| `--ggb-border-c2` | `tileBorder.color2` | `#52B9F0` |
+| `--ggb-border-angle` | `tileBorder.angle` | `135` (deg) |
+| `--ggb-border-opacity` | `tileBorder.opacity` | `90` |
 | `--ggb-weave-height` | `weave.height` | `50` (global relief strength) |
 | `--ggb-color-1..4` | shapes palette | Bezeq: `#F74A84` `#2A73F0` `#52B9F0` `#0B0B33` |
 | `--ggb-speed` | source speed | `1` |
@@ -132,7 +139,18 @@ Every tile carries an embossed bump ("relief"): `shape` picks the silhouette —
 `round` (circle), `rect` (follows the tile corners) or `dome` (amorphous organic
 blobs, varied across the grid); `area` sets how much of the tile it covers and
 `height` how strongly it reads. The bump is lit by the same light-angle tokens
-as the rest of the glass.
+as the rest of the glass. **Default height is 0** — tiles ship clean, with no
+center shape; raise the slider to bring the bump back.
+
+### Tile contour (`tileBorder`)
+
+The tile outline is its own layer with three styles: `light` (default — a white
+line scaled by the light intensity, the classic look), `linear` (a two-color
+gradient running across each tile at `angle`) and `conic` (the gradient sweeps
+around the tile's perimeter, starting from `angle`). `color1`/`color2` set the
+gradient stops and `opacity` fades the whole contour. The gradient paints on a
+mask-composited ring, so it colors only the outline band — the glass face stays
+translucent glass.
 
 The **weave** is a global relief: one height field spanning the whole grid, so
 tiles rise together as a single embossed surface instead of independent units.
@@ -193,14 +211,43 @@ icon in the lab and its alpha silhouette is rasterized into the layout mask
 the shape inside the grid and `invert` cuts the shape out of a full grid instead.
 Crisp silhouettes want small tiles (~24–32px).
 
+Whenever a stencil is active the background is **cropped to the tiles**: a mask
+built from the visible cells themselves (one rounded rect per cube, expanded by
+`padding` pixels) clips the motion layer, so the contour is pixelated by the
+grid — an outer padding around the cubes, not a smoothed vector shape. Works
+identically for built-ins, inverted layouts and custom icons, and stays pinned
+to the glass under scroll parallax.
+
+### Shape scenes
+
+Every built-in stencil can summon a background scene drawn for that exact
+shape («להפעיל רקע מותאם לצורה» in the lab, or `source: { kind: 'scene', shape,
+colors }`): the `eye` layout gets a blinking eye whose glowing iris wanders and
+its pupil dilates; `heart` gets a double-thump heartbeat with expanding rings;
+`wifi` lights its arcs in sequence from the dot; `house` glows from the hearth;
+`iphone` scrolls a feed with notification pulses; `star` spins rays and
+twinkles its tips; `music` runs an equalizer; `bubble` types dots and floats
+bubbles; `drop` fills with a waving water level; `bolt` strobes seeded
+lightning — and the other shapes get a generic breathing-silhouette scene with
+an orbiting light. The scene follows the stencil's shape and scale
+automatically, uses the palette's four colors (editable in the lab), and
+honors `prefers-reduced-motion` like every other source.
+
 ### Pixel play & zoom
 
 Canvas backgrounds (shapes, gradients, gallery picks) accept a post-processing
-**pixel effect** (`preset.effect: { type, intensity, speed }`): `ripple` (water-surface
-row displacement), `wind` (turbulent drift with streaks), `rain` (columns of pixels
-falling and wrapping), `mosaic` (animated coarse pixels) and `glitch` (slice jumps).
-The scene renders into an offscreen buffer and the effect composites it with
-slice-based `drawImage` — GPU-friendly, no per-pixel loops.
+**pixel effect** (`preset.effect: { type, intensity, speed, scale?, direction?,
+tint?, tintStrength? }`). Flow family: `ripple` (water-surface row displacement),
+`wind` (turbulent directional drift with streaks), `stream` (two-pass row/column
+current flowing toward `direction`), `swirl` (concentric rings churning around
+the center) and `melt` (columns stretching downward). Pixel family: `rain`
+(columns of pixels falling and wrapping), `mosaic` (animated coarse pixels) and
+`glitch` (slice jumps). Beyond `intensity` and `speed`, every effect reads
+`scale` (pattern size — wavelength, band width, block size…), directional
+effects read `direction` (deg), and an optional `tint` color washes over the
+result with `tintStrength` — so each effect has real play space, colors
+included. The scene renders into an offscreen buffer and the effect composites
+it with slice-based `drawImage` — GPU-friendly, no per-pixel loops.
 
 Two **zoom** controls scale the layers independently: `zoom.grid` grows/shrinks the
 glass cubes as one layer and `zoom.source` zooms the background canvas in and out

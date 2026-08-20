@@ -146,6 +146,7 @@ export default function LabPage() {
               zoom={preset.zoom}
               motionFx={preset.motionFx}
               stencil={preset.stencil}
+              tileBorder={preset.tileBorder}
               source={preset.source}
               quality={preset.quality}
               className="lab-preview-ggb"

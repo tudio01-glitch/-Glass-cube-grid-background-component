@@ -16,7 +16,11 @@
   --ggb-tilt-y: 0;
   --ggb-perspective: 900px;
   --ggb-relief-area: 78;
-  --ggb-relief-height: 55;
+  --ggb-relief-height: 0; /* clean tiles by default */
+  --ggb-border-c1: #ffffff;
+  --ggb-border-c2: #52b9f0;
+  --ggb-border-angle: 135;
+  --ggb-border-opacity: 90;
   --ggb-weave-height: 50;
   --ggb-ptr-strength: 55;
   --ggb-ptr-radius: 45;
@@ -57,6 +61,15 @@
   --ggb-light-grad-angle: calc(180deg + var(--ggb-light-angle) * 1deg);
   --ggb-relief-h: calc(var(--ggb-relief-height) / 100);
   --ggb-weave-h: calc(var(--ggb-weave-height) / 100);
+  /* tile fill + contour layers (the contour is painted as a border-box
+     gradient behind a padding-box fill, so it follows the tile radius) */
+  --ggb-fill: color-mix(in srgb, var(--ggb-tint) calc(var(--ggb-opacity) * 1%), transparent);
+  --ggb-border-a: calc(var(--ggb-border-opacity) / 100);
+  --ggb-border-c1-a: color-mix(in srgb, var(--ggb-border-c1) calc(var(--ggb-border-a) * 100%), transparent);
+  --ggb-border-c2-a: color-mix(in srgb, var(--ggb-border-c2) calc(var(--ggb-border-a) * 100%), transparent);
+  /* default 'light' contour: white scaled by the light intensity */
+  --ggb-border-light: rgba(255, 255, 255, calc(var(--ggb-light-a) * 0.3));
+  --ggb-border-layer: linear-gradient(var(--ggb-border-light), var(--ggb-border-light));
   --ggb-ptr-surface-max: calc(var(--ggb-ptr-strength) * 0.14); /* deg at full deflection */
   /* tilt zoom compensation so the tipped plane keeps covering the box */
   --ggb-tilt-x-abs: max(var(--ggb-tilt-x), calc(-1 * var(--ggb-tilt-x)));
@@ -67,6 +80,23 @@
      0.3-0.95x layer-speed band award sites ship (Firewatch/Locomotive/satus). */
   --ggb-par-src-px: calc(var(--ggb-par-p) * var(--ggb-par-depth) * -0.7px);
   --ggb-par-grid-px: calc(var(--ggb-par-p) * var(--ggb-par-depth) * 0.25px);
+}
+
+.ggb--border-linear {
+  --ggb-border-layer: linear-gradient(
+    calc(var(--ggb-border-angle) * 1deg),
+    var(--ggb-border-c1-a),
+    var(--ggb-border-c2-a)
+  );
+}
+
+.ggb--border-conic {
+  --ggb-border-layer: conic-gradient(
+    from calc(var(--ggb-border-angle) * 1deg),
+    var(--ggb-border-c1-a),
+    var(--ggb-border-c2-a),
+    var(--ggb-border-c1-a)
+  );
 }
 
 /* parallax on: extra source zoom headroom so drifting edges never show */
@@ -226,14 +256,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: var(--ggb-tile-border) solid
-    rgba(255, 255, 255, calc(var(--ggb-light-a) * 0.3));
-  /* tile fill: tint color scaled by the opacity token */
-  background-color: color-mix(
-    in srgb,
-    var(--ggb-tint) calc(var(--ggb-opacity) * 1%),
-    transparent
-  );
+  background: var(--ggb-fill);
   backdrop-filter: blur(var(--ggb-frost-px)) saturate(1.2);
   -webkit-backdrop-filter: blur(var(--ggb-frost-px)) saturate(1.2);
   box-shadow:
@@ -253,6 +276,26 @@
     0 calc(var(--ggb-h, 0) * var(--ggb-weave-h) * 12px)
       calc(var(--ggb-h, 0) * var(--ggb-weave-h) * 18px)
       rgba(11, 11, 51, calc(var(--ggb-h, 0) * 0.35));
+}
+
+/* contour ring: the gradient paints on a child clipped to the border band
+   with mask-composite, so a translucent glass fill never lets the gradient
+   bleed into the tile face — only the outline carries it */
+.ggb-tile-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--ggb-tile-border);
+  background: var(--ggb-border-layer);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 /* frost 0: skip the backdrop snapshot entirely — big win at 200+ tiles */

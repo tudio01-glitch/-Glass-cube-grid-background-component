@@ -321,44 +321,26 @@ export function rasterizeStencil(id: StencilId): Heightmap {
   return mask;
 }
 
-function maskToCanvas(mask: Heightmap): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = mask.size;
-  canvas.height = mask.size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return canvas;
-  const img = ctx.createImageData(mask.size, mask.size);
-  for (let i = 0; i < mask.data.length; i++) {
-    img.data[i * 4] = 255;
-    img.data[i * 4 + 1] = 255;
-    img.data[i * 4 + 2] = 255;
-    img.data[i * 4 + 3] = (mask.data[i] ?? 0) > 0.5 ? 255 : 0;
-  }
-  ctx.putImageData(img, 0, 0);
-  return canvas;
-}
-
 /**
- * Builds the CSS mask-image that crops the background to the tiles'
- * silhouette. The raster covers the whole grid box (correct aspect), the
- * shape sits centered at its sampling square, and it is dilated by
- * `dilatePx` (multi-offset painting) so edge tiles keep background behind
- * them. With `invert` the shape becomes an eroded hole in a full cover.
+ * Builds the CSS mask-image that crops the background to the visible
+ * tiles themselves: every visible cell contributes its own rounded rect
+ * expanded by `padPx`, so the crop contour follows the grid — pixelated
+ * like the tiles — instead of tracing the smooth shape silhouette.
  */
-export function buildCropMaskUrl(opts: {
-  shape: string;
-  customMask: Heightmap | null;
-  gridW: number;
-  gridH: number;
-  sidePx: number;
-  dilatePx: number;
-  invert: boolean;
+export function buildTileCropMaskUrl(opts: {
+  visible: boolean[];
+  cols: number;
+  rows: number;
+  tileSize: number;
+  gapX: number;
+  gapY: number;
+  radius: number;
+  padPx: number;
 }): string {
-  const { shape, customMask, gridW, gridH, sidePx, dilatePx, invert } = opts;
-  const builtin = isStencilId(shape) ? shape : null;
-  const custom = shape === 'custom' && customMask ? maskToCanvas(customMask) : null;
-  if (!builtin && !custom) return '';
-  const scale = CROP_RES / Math.max(1, Math.max(gridW, gridH));
+  const { visible, cols, rows, tileSize, gapX, gapY, radius, padPx } = opts;
+  const gridW = cols * tileSize + (cols - 1) * gapX;
+  const gridH = rows * tileSize + (rows - 1) * gapY;
+  const scale = (CROP_RES * 2) / Math.max(1, Math.max(gridW, gridH));
   const W = Math.max(2, Math.round(gridW * scale));
   const H = Math.max(2, Math.round(gridH * scale));
   const canvas = document.createElement('canvas');
@@ -366,40 +348,29 @@ export function buildCropMaskUrl(opts: {
   canvas.height = H;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
-
-  const paint = (ox: number, oy: number, side: number) => {
-    const x = (W - side) / 2 + ox;
-    const y = (H - side) / 2 + oy;
-    if (builtin) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.fillStyle = '#fff';
-      ctx.strokeStyle = '#fff';
-      drawStencil(builtin, ctx, side);
-      ctx.restore();
-    } else if (custom) {
-      ctx.drawImage(custom, x, y, side, side);
-    }
-  };
-
-  const side = sidePx * scale;
-  const d = Math.max(0, dilatePx * scale);
-  if (!invert) {
-    // dilation: paint the silhouette at a ring of offsets around center
-    paint(0, 0, side);
-    const steps = 16;
-    for (let k = 0; k < steps; k++) {
-      const a = (k / steps) * Math.PI * 2;
-      paint(Math.cos(a) * d, Math.sin(a) * d, side);
-    }
-  } else {
-    // full cover minus an eroded hole (scaled-down shape approximates erosion)
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = 'destination-out';
-    paint(0, 0, Math.max(1, side - 2 * d));
-    ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#fff';
+  const pad = padPx * scale;
+  const size = tileSize * scale;
+  const r = Math.min((radius + padPx) * scale, (size + 2 * pad) / 2);
+  ctx.beginPath();
+  for (let i = 0; i < visible.length; i++) {
+    if (!visible[i]) continue;
+    const col = i % cols;
+    const row = (i / cols) | 0;
+    const x = col * (tileSize + gapX) * scale - pad;
+    const y = row * (tileSize + gapY) * scale - pad;
+    const w = size + 2 * pad;
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + w - r);
+    ctx.arcTo(x + w, y + w, x + w - r, y + w, r);
+    ctx.lineTo(x + r, y + w);
+    ctx.arcTo(x, y + w, x, y + w - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
   }
+  ctx.fill();
   return canvas.toDataURL('image/png');
 }
 

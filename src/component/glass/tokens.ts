@@ -48,7 +48,17 @@ export type StencilSettings = {
   mask: Heightmap | null; // silhouette of the custom icon
   scale: number; // 20-100, % of the grid min side the shape spans. default 92
   invert: boolean; // true = the shape is cut out of a full grid
+  padding: number; // px, background crop margin around each visible cube. default 10
   fileName?: string;
+};
+
+/** The tile contour: light-driven white or a two-color gradient ring. */
+export type TileBorderSettings = {
+  style: 'light' | 'linear' | 'conic';
+  color1: string; // default '#FFFFFF'
+  color2: string; // default '#52B9F0'
+  angle: number; // deg — linear direction / conic start. default 135
+  opacity: number; // 0-100. default 90
 };
 
 /** Visual zoom of the two layers, as scale factors. */
@@ -119,9 +129,22 @@ export type ShapeKind =
 
 /** Post-processing pixel play applied to canvas-rendered backgrounds. */
 export type PixelEffect = {
-  type: 'off' | 'ripple' | 'wind' | 'rain' | 'mosaic' | 'glitch';
+  type:
+    | 'off'
+    | 'ripple'
+    | 'wind'
+    | 'rain'
+    | 'mosaic'
+    | 'glitch'
+    | 'stream' // directional liquid flow
+    | 'swirl' // rings rotating around the origin
+    | 'melt'; // columns dripping downward
   intensity: number; // 0-100
   speed: number; // 0.1-3
+  scale?: number; // 0-100, feature size (wavelength / band / block). default 50
+  direction?: number; // deg, for directional effects (stream/wind/swirl). default 0
+  tint?: string; // effect color wash. default '#ffffff'
+  tintStrength?: number; // 0-100, 0 = no wash. default 0
 };
 
 export type ShapesPreset = {
@@ -144,7 +167,10 @@ export type MotionSource =
   | { kind: 'shapes'; preset: ShapesPreset }
   | { kind: 'media'; src: string; type: 'gif' | 'video' | 'svg'; speed?: number }
   | { kind: 'lottie'; data: object | string; speed?: number; loop?: boolean }
-  | { kind: 'draw'; path: Point[]; stroke: number; color: string; motion: DrawMotion };
+  | { kind: 'draw'; path: Point[]; stroke: number; color: string; motion: DrawMotion }
+  // a background scene that visually completes a stencil layout
+  // (eye blinks and gazes, heart beats, wifi transmits, ...)
+  | { kind: 'scene'; shape: string; colors: string[]; speed?: number; scale?: number };
 
 export type GlassQuality = 'css' | 'hq';
 
@@ -158,6 +184,7 @@ export type GlassGridBgProps = {
   zoom?: Partial<ZoomSettings>; // visual zoom of grid / background layers
   motionFx?: Partial<MotionFxSettings>; // float / parallax / gyro / tap pulse
   stencil?: Partial<StencilSettings>; // tiles form a shape instead of a full grid
+  tileBorder?: Partial<TileBorderSettings>; // gradient-capable tile contour
   source?: MotionSource; // what moves behind the glass
   quality?: GlassQuality; // hq = SVG displacement filters (refraction/dispersion)
   className?: string;
@@ -175,6 +202,7 @@ export type GlassGridPreset = {
   zoom: ZoomSettings;
   motionFx: MotionFxSettings;
   stencil: StencilSettings;
+  tileBorder: TileBorderSettings;
   source: MotionSource;
   quality: GlassQuality;
 };
@@ -215,6 +243,15 @@ export const defaultStencil: StencilSettings = {
   mask: null,
   scale: 92,
   invert: false,
+  padding: 10,
+};
+
+export const defaultTileBorder: TileBorderSettings = {
+  style: 'light',
+  color1: '#FFFFFF',
+  color2: '#52B9F0',
+  angle: 135,
+  opacity: 90,
 };
 
 export const defaultMotionFx: MotionFxSettings = {
@@ -231,7 +268,7 @@ export const defaultMotionFx: MotionFxSettings = {
 export const defaultRelief: ReliefSettings = {
   shape: 'round',
   area: 78,
-  height: 55,
+  height: 0, // clean tiles by default — raise to emboss the bump
 };
 
 export const defaultWeave: WeaveSettings = {
@@ -293,6 +330,7 @@ export const defaultPreset: GlassGridPreset = {
   zoom: defaultZoom,
   motionFx: defaultMotionFx,
   stencil: defaultStencil,
+  tileBorder: defaultTileBorder,
   source: defaultSource,
   quality: 'css',
 };
@@ -309,6 +347,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     zoom?: Partial<ZoomSettings>;
     motionFx?: Partial<MotionFxSettings>;
     stencil?: Partial<StencilSettings>;
+    tileBorder?: Partial<TileBorderSettings>;
     source?: MotionSource;
     quality?: GlassQuality;
   };
@@ -322,6 +361,7 @@ export function normalizePreset(input: unknown): GlassGridPreset {
     zoom: { ...defaultZoom, ...p.zoom },
     motionFx: { ...defaultMotionFx, ...p.motionFx },
     stencil: { ...defaultStencil, ...p.stencil },
+    tileBorder: { ...defaultTileBorder, ...p.tileBorder },
     source: p.source ?? defaultSource,
     quality: p.quality === 'hq' ? 'hq' : 'css',
   };
@@ -333,6 +373,7 @@ function sourceSpeed(source: MotionSource): number {
       return source.preset.speed;
     case 'media':
     case 'lottie':
+    case 'scene':
       return source.speed ?? 1;
     case 'draw':
       return source.motion.speed;
@@ -353,11 +394,11 @@ export function tokensToCssVars(
   pointerTilt: PointerTiltSettings = defaultPointerTilt,
   zoom: ZoomSettings = defaultZoom,
   motionFx: MotionFxSettings = defaultMotionFx,
+  tileBorder: TileBorderSettings = defaultTileBorder,
 ): Record<string, string> {
-  const colors =
-    source.kind === 'shapes' && source.preset.colors.length > 0
-      ? source.preset.colors
-      : BEZEQ_COLORS;
+  const sourceColors =
+    source.kind === 'shapes' ? source.preset.colors : source.kind === 'scene' ? source.colors : [];
+  const colors = sourceColors.length > 0 ? sourceColors : BEZEQ_COLORS;
   return {
     '--ggb-tile-size': `${tiles.size}px`,
     '--ggb-tile-gap-x': `${tiles.gapX}px`,
@@ -380,6 +421,10 @@ export function tokensToCssVars(
     '--ggb-ptr-radius': String(pointerTilt.radius),
     '--ggb-grid-zoom': String(zoom.grid),
     '--ggb-source-zoom': String(zoom.source),
+    '--ggb-border-c1': tileBorder.color1,
+    '--ggb-border-c2': tileBorder.color2,
+    '--ggb-border-angle': String(tileBorder.angle),
+    '--ggb-border-opacity': String(tileBorder.opacity),
     '--ggb-float-amp': `${motionFx.floatAmplitude}`,
     '--ggb-float-dur': `${(6 / Math.max(0.1, motionFx.floatSpeed)).toFixed(2)}s`,
     '--ggb-par-depth': String(motionFx.parallaxDepth),
@@ -406,6 +451,7 @@ export function tokensToStyle(
   pointerTilt: PointerTiltSettings = defaultPointerTilt,
   zoom: ZoomSettings = defaultZoom,
   motionFx: MotionFxSettings = defaultMotionFx,
+  tileBorder: TileBorderSettings = defaultTileBorder,
 ): CSSProperties {
   return tokensToCssVars(
     tiles,
@@ -417,5 +463,6 @@ export function tokensToStyle(
     pointerTilt,
     zoom,
     motionFx,
+    tileBorder,
   ) as CSSProperties;
 }
